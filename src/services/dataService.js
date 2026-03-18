@@ -81,8 +81,15 @@ export const addRequestToFirestore = async (request) => {
   });
 };
 
-export const updateRequestStatusInFirestore = async (requestId, status) => {
-  await updateDoc(doc(db, "requests", requestId), { status });
+export const updateRequestStatusInFirestore = async (requestId, status, approvedQty = null, previousStatus = null) => {
+  const updates = { status };
+  if (approvedQty !== null) updates.approvedQty = approvedQty;
+  if (previousStatus !== null) updates.previousStatus = previousStatus;
+  await updateDoc(doc(db, "requests", requestId), updates);
+};
+
+export const updateRequestInFirestore = async (requestId, updates) => {
+  await updateDoc(doc(db, "requests", requestId), updates);
 };
 
 export const addUserToFirestore = async (user) => {

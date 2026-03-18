@@ -19,6 +19,7 @@ import {
   updateInventoryInFirestore,
   addRequestToFirestore,
   updateRequestStatusInFirestore,
+  updateRequestInFirestore,
   addUserToFirestore,
   addTransaction
 } from './services/dataService';
@@ -409,25 +410,104 @@ export default function App() {
 
           <div className="min-h-[400px]">
             {activeTab === 'requests' && (
-              <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
-                <table className="w-full text-right text-sm">
-                  <thead className="bg-slate-50 text-slate-400 font-black border-b text-[10px] uppercase">
-                    <tr><th className="p-6">מתי</th><th className="p-6">פלוגה</th><th className="p-6">פריט</th><th className="p-6 text-left">סטטוס</th></tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {requests.map(req => (
-                      <tr key={req.id} className="hover:bg-slate-50">
-                        <td className="p-6">{req.time || new Date().toLocaleDateString()}</td>
-                        <td className="p-6">{req.company}</td>
-                        <td className="p-6 font-black">{catalog.find(c => c.internal_id === req.item_id)?.name || 'פריט לא ידוע'}</td>
-                        <td className="p-6 text-left"><Badge variant={req.status === 'PENDING' ? 'warning' : 'success'}>{req.status}</Badge></td>
-                      </tr>
-                    ))}
-                    {requests.length === 0 && (
-                      <tr><td colSpan="4" className="p-20 text-center text-slate-300 italic">אין דרישות פתוחות כרגע</td></tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="space-y-6 animate-fade-in">
+                {(user.role === 'ADMIN' || user.role === 'LOGI_OFFICER') ? (
+                  <div className="grid grid-cols-1 gap-6">
+                    {/* Command Center View */}
+                    <div className="bg-white rounded-3xl border shadow-sm p-8">
+                      <div className="flex justify-between items-center mb-8 border-b pb-4">
+                        <div>
+                          <h3 className="text-xl font-black text-idf-dark">מרכז שליטה לוגיסטי - ניהול הקצאות</h3>
+                          <p className="text-xs text-slate-400">ניהול דרישות רוחבי ותעדוף פלוגות</p>
+                        </div>
+                        <Badge variant="info" className="px-4 py-2 text-xs">מצב תמיכת החלטות פעיל</Badge>
+                      </div>
+
+                      <div className="space-y-4">
+                        {catalog.map(item => {
+                          const itemRequests = requests.filter(r => r.item_id === item.internal_id && r.status !== 'ISSUED');
+                          const stock = inventory.battalion.find(i => i.item_id === item.internal_id)?.qty || 0;
+                          if (itemRequests.length === 0) return null;
+
+                          return (
+                            <div key={item.internal_id} className="border rounded-2xl overflow-hidden bg-slate-50/50">
+                              <div className="p-4 bg-white flex justify-between items-center border-b">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-idf-primary font-black">
+                                    {itemRequests.length}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-base">{item.name}</h4>
+                                    <p className="text-[10px] text-slate-400">סה"כ נדרש: {itemRequests.reduce((a,b) => a + b.qty, 0)} | <span className="text-idf-primary font-bold">במלאי: {stock}</span></p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={() => {/* TODO: Bulk Escalate */}} className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400">העבר לחטיבה</button>
+                                  <button onClick={() => {/* TODO: Undo */}} className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400 flex items-center gap-1"><History size={12}/> Undo</button>
+                                </div>
+                              </div>
+                              
+                              <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-4">
+                                {['אלפא', 'בראבו', 'ג', 'מפקדה', 'מסייעת'].map(comp => {
+                                  const req = itemRequests.find(r => r.company === comp);
+                                  return (
+                                    <div key={comp} className={`p-4 rounded-xl border ${req ? 'bg-white shadow-sm border-blue-100' : 'bg-slate-50/30 border-dashed opacity-60'}`}>
+                                      <div className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">{comp}</div>
+                                      <div className="flex justify-between items-end">
+                                        <div className="text-[10px] font-bold">
+                                          {req ? `ביקשו: ${req.qty}` : 'לא ביקשו'}
+                                        </div>
+                                        <input 
+                                          type="number" 
+                                          defaultValue={req?.approvedQty || 0}
+                                          onChange={async (e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (req) {
+                                              await updateRequestInFirestore(req.id, { approvedQty: val, status: 'READY_FOR_PICKUP', previousStatus: req.status });
+                                            } else {
+                                              // Proactive allocation
+                                              await addRequestToFirestore({
+                                                item_id: item.internal_id,
+                                                company: comp,
+                                                qty: 0,
+                                                approvedQty: val,
+                                                status: 'READY_FOR_PICKUP',
+                                                time: new Date().toLocaleTimeString()
+                                              });
+                                            }
+                                          }}
+                                          className="w-12 bg-slate-100 border-none rounded-lg text-center font-black text-idf-primary p-2 focus:ring-2 focus:ring-idf-primary/20"
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
+                    <table className="w-full text-right text-sm">
+                      <thead className="bg-slate-50 text-slate-400 font-black border-b text-[10px] uppercase">
+                        <tr><th className="p-6">מתי</th><th className="p-6">פלוגה</th><th className="p-6">פריט</th><th className="p-6 text-left">סטטוס</th></tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {requests.filter(r => r.company === user.company).map(req => (
+                          <tr key={req.id} className="hover:bg-slate-50">
+                            <td className="p-6">{req.time || new Date().toLocaleDateString()}</td>
+                            <td className="p-6">{req.company}</td>
+                            <td className="p-6 font-black">{catalog.find(c => c.internal_id === req.item_id)?.name || 'פריט לא ידוע'}</td>
+                            <td className="p-6 text-left"><Badge variant={req.status === 'PENDING' ? 'warning' : 'success'}>{req.status}</Badge></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
             {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} user={user} />}
