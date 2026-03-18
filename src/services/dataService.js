@@ -30,7 +30,7 @@ export const seedInitialData = async (initialData) => {
     await setDoc(doc(db, "users", mainAdmin.email), mainAdmin);
   }
 
-  const inventoryDoc = doc(db, "inventory", "main");
+  const inventoryDoc = doc(db, "inventory", "battalion");
   const inventorySnap = await getDocs(collection(db, "inventory"));
   if (inventorySnap.empty) {
     console.log("Seeding initial inventory...");
@@ -56,7 +56,7 @@ export const subscribeToCollection = (collectionName, callback) => {
 };
 
 export const subscribeToInventory = (callback) => {
-  return onSnapshot(doc(db, "inventory", "main"), (doc) => {
+  return onSnapshot(doc(db, "inventory", "battalion"), (doc) => {
     if (doc.exists()) callback(doc.data());
   });
 };
@@ -71,7 +71,7 @@ export const getUserByEmail = async (email) => {
 
 // --- UPDATE ACTIONS ---
 export const updateInventoryInFirestore = async (newInventory) => {
-  await setDoc(doc(db, "inventory", "main"), newInventory);
+  await setDoc(doc(db, "inventory", "battalion"), newInventory);
 };
 
 export const addRequestToFirestore = async (request) => {
