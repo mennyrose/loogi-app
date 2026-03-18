@@ -10,7 +10,7 @@ import {
 
 // --- FIREBASE & SERVICES ---
 import { auth, googleProvider, db } from './firebase';
-import { signInWithRedirect, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithRedirect, onAuthStateChanged, signOut, getRedirectResult } from 'firebase/auth';
 import { 
   seedInitialData, 
   subscribeToCollection, 
@@ -254,13 +254,20 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
-    // Safety timeout to prevent infinite loading
+    // Safety timeout
     const loadingTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn("Loading timeout reached. Forcing UI display.");
-        setLoading(false);
+      if (loading) { setLoading(false); }
+    }, 10000);
+
+    // Explicitly handle Redirect Result
+    getRedirectResult(auth).then((result) => {
+      if (result) {
+        console.log("Redirect Auth Success:", result.user.email);
       }
-    }, 8000);
+    }).catch((error) => {
+      console.error("Redirect Auth Error:", error);
+      alert("שגיאת חזרה מהתחברות: " + error.message);
+    });
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       console.log("Auth Stage 1: State Change Detected", authUser?.email);
