@@ -51,7 +51,7 @@ const INITIAL_USERS = [
 const Logo = () => (
   <div className="flex items-center gap-3">
     <img 
-      src="file:///C:/Users/user/.gemini/antigravity/brain/d0625862-32fb-4364-acc5-a58a545f87a8/media__1773767289130.png" 
+      src="/logo_official.png" 
       alt="L∞Giz Logo" 
       className="h-12 w-auto object-contain"
     />
@@ -254,17 +254,29 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
-    onAuthStateChanged(auth, async (authUser) => {
+    const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
+      console.log("Auth Stage 1: State Change Detected", authUser?.email);
       if (authUser) {
-        const userData = await getUserByEmail(authUser.email);
-        if (userData) setUser({ ...authUser, ...userData });
-        else {
-          // New user logic (default to basic resap or admin depending on first user)
-          const newUser = { email: authUser.email, full_name: authUser.displayName, role: 'COMPANY_SGT', company: 'אלפא' };
-          await addUserToFirestore(newUser);
-          setUser({ ...authUser, ...newUser });
+        try {
+          console.log("Auth Stage 2: Fetching DB Metadata...");
+          const userData = await getUserByEmail(authUser.email);
+          if (userData) {
+            console.log("Auth Stage 3: Found User Role:", userData.role);
+            setUser({ ...authUser, ...userData });
+          } else {
+            console.log("Auth Stage 3: New User, Auto-Registering...");
+            const newUser = { email: authUser.email, full_name: authUser.displayName, role: 'COMPANY_SGT', company: 'אלפא' };
+            await addUserToFirestore(newUser);
+            setUser({ ...authUser, ...newUser });
+          }
+        } catch (err) {
+          console.error("Auth System Critical Error:", err);
+          alert("שגיאת הרשאות: " + err.message + "\nוודא ש-Firestore מוגדר ב-Test Mode.");
         }
-      } else setUser(null);
+      } else {
+        console.log("Auth Stage 1: No User Session");
+        setUser(null);
+      }
       setLoading(false);
     });
 
