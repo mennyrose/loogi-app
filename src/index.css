@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --color-idf-primary: #e69b16; /* Brand Gold/Orange */
+  --color-idf-dark: #1a1a1a;    /* Brand Charcoal */
+  --color-idf-light: #f8fafc;
+  
+  --font-heebo: "Heebo", sans-serif;
+}
+
+:root {
+  font-family: "Heebo", sans-serif;
+  background-color: #f8fafc;
+  color: #1a1a1a;
+}
+
+@utility btn-primary {
+  @apply bg-idf-primary text-white font-black px-6 py-3 rounded-xl shadow-lg shadow-idf-primary/20 hover:bg-idf-primary/90 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2;
+}
+
+@utility input-clean {
+  @apply w-full border border-slate-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-idf-primary/10 transition-all font-medium;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@utility animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@utility animate-slide-up {
+  animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
