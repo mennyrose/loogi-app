@@ -473,7 +473,7 @@ export default function App() {
   const [activeSerialItem, setActiveSerialItem] = useState(null);
   const [newData, setNewData] = useState({});
   const [botOpen, setBotOpen] = useState(false);
-  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || 'AIzaSyBiVqKFHQ2DizDvYyh1boAO0tH6qM1SCLw');
 
   useEffect(() => {
     // Force Persistence
