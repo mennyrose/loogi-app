@@ -5,7 +5,7 @@ import {
   LogOut, Menu, X, ChevronDown, ArrowUpRight, ShoppingBag, Users,
   ShieldCheck, Settings, Trash2, Edit2, UserPlus, Info, FileText,
   MessageSquare, Download, BarChart2, Briefcase, History, Upload, Image as ImageIcon, Save,
-  ArrowRight, CreditCard, PenTool, Check, ChevronLeft, ExternalLink, RefreshCw
+  ArrowRight, CreditCard, PenTool, Check, ChevronLeft, ExternalLink, RefreshCw, Send
 } from 'lucide-react';
 
 // --- FIREBASE & SERVICES ---
@@ -377,76 +377,79 @@ const IssuingModule = ({ catalog, inventory, user, templates }) => {
 };
 
 // --- NEW COMPONENT: LogiBot ---
-const LogiBot = ({ catalog, inventory, requests, transactions }) => {
+const LogiBot = ({ catalog, inventory, requests, transactions, onClose, apiKey }) => {
   const [messages, setMessages] = useState([
-    { role: 'bot', text: 'שלום! אני העוזר הלוגיסטי שלך. איך אוכל לעזור היום?' }
+    { role: 'bot', text: 'שלום! אני LogiBot, העוזר הלוגיסטי החכם שלך. איך אוכל לעזור היום?' }
   ]);
   const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
 
   const scrollRef = useRef();
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const onSend = (txt) => {
+  const onSend = async (txt) => {
+    if (!txt.trim()) return;
     const userMsg = { role: 'user', text: txt };
     setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsTyping(true);
     
     // Process AI
-    setTimeout(() => {
-      const resp = processQuery(txt, { catalog, inventory, requests, transactions });
-      setMessages(prev => [...prev, { role: 'bot', ...resp }]);
-    }, 500);
-    setInput('');
+    const resp = await processQuery(txt, { catalog, inventory, requests, transactions }, apiKey);
+    setMessages(prev => [...prev, { role: 'bot', ...resp }]);
+    setIsTyping(false);
   };
 
   return (
-    <div className="max-w-4xl mx-auto bg-white rounded-[2.5rem] border shadow-2xl flex flex-col h-[650px] overflow-hidden animate-fade-in relative">
-      <div className="p-6 bg-idf-dark text-white flex justify-between items-center">
+    <div className="fixed bottom-24 left-10 w-[400px] h-[600px] bg-white rounded-[2.5rem] border shadow-2xl flex flex-col overflow-hidden animate-scale-in z-[500] border-idf-primary/20">
+      <div className="p-5 bg-idf-dark text-white flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-idf-primary rounded-2xl flex items-center justify-center animate-pulse"><MessageSquare size={22} /></div>
-          <div><h3 className="font-black">LogiBot AI</h3><p className="text-[9px] opacity-60 uppercase tracking-widest">Active Intelligence Suite</p></div>
+          <div><h3 className="font-black text-sm">LogiBot AI</h3><p className="text-[8px] opacity-60 uppercase tracking-widest">v3.5 Gemini Enhanced</p></div>
         </div>
-        <Badge variant="info">v3.4 Analyze Mode</Badge>
+        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-            <div className={`max-w-[80%] p-5 rounded-3xl shadow-sm border ${m.role === 'user' ? 'bg-white rounded-tr-none' : 'bg-idf-primary text-white rounded-tl-none border-idf-primary'}`}>
-              <p className="text-sm font-bold leading-relaxed">{m.text}</p>
+            <div className={`max-w-[85%] p-4 rounded-[1.5rem] shadow-sm text-xs font-bold leading-relaxed ${m.role === 'user' ? 'bg-white border rounded-tr-none text-slate-700' : 'bg-idf-primary text-white rounded-tl-none'}`}>
+              <p>{m.text}</p>
               {m.data && (
-                <div className="mt-4 overflow-x-auto rounded-xl border bg-white/10 p-2">
-                  <table className="w-full text-[10px] text-right">
+                <div className="mt-3 overflow-x-auto rounded-xl border bg-white/10 p-2 text-[9px]">
+                  <table className="w-full text-right">
                     <thead><tr className="border-b border-white/20">
-                      {Object.keys(m.data[0]).map(k => <th key={k} className="p-2 opacity-60">{k}</th>)}
+                      {Object.keys(m.data[0]).map(k => <th key={k} className="p-1 opacity-60">{k}</th>)}
                     </tr></thead>
                     <tbody>{m.data.map((row, idx) => (
-                      <tr key={idx} className="border-b border-white/5 last:border-0">
-                        {Object.values(row).map((v, idx2) => <td key={idx2} className="p-2 font-black">{v}</td>)}
+                      <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/5">
+                        {Object.values(row).map((v, idx2) => <td key={idx2} className="p-1">{v}</td>)}
                       </tr>
                     ))}</tbody>
                   </table>
-                  <button onClick={() => exportToExcel(m.data, `${m.type}_Report.xlsx`)} className="mt-3 flex items-center gap-2 text-[8px] bg-white/20 px-3 py-1.5 rounded-lg hover:bg-white/40 transition-all font-black">
-                    <Download size={10} /> הורד כדוח אקסל
+                  <button onClick={() => exportToExcel(m.data)} className="mt-2 flex items-center gap-1 text-[8px] bg-white/20 px-2 py-1 rounded-lg hover:bg-white/30 transition-all">
+                    <Download size={10} /> ייצוא לאקסל
                   </button>
                 </div>
               )}
             </div>
           </div>
         ))}
+        {isTyping && <div className="flex justify-end animate-pulse"><div className="bg-idf-primary/10 p-3 rounded-2xl text-[10px] font-black text-idf-primary">חושב...</div></div>}
         <div ref={scrollRef} />
       </div>
 
       <div className="p-4 bg-white border-t space-y-3">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-            {['מה החוסרים שלי?', 'מי משך הכי הרבה?', 'קצב צריכת מתכלים', 'השוואה וסט לוחם'].map(q => (
-              <button key={q} onClick={() => onSend(q)} className="whitespace-nowrap px-4 py-2 bg-slate-100 hover:bg-idf-primary hover:text-white rounded-xl text-[10px] font-black transition-all border border-slate-200">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {['מה חסר?', 'השוואת מלאי', 'מתי ייגמר המלאי?', 'עזרה'].map(q => (
+              <button key={q} onClick={() => onSend(q)} className="whitespace-nowrap px-3 py-1.5 bg-slate-50 hover:bg-idf-primary hover:text-white rounded-lg text-[9px] font-black transition-all border border-slate-100 italic">
                 {q}
               </button>
             ))}
         </div>
-        <div className="flex gap-3">
-          <input className="input-clean bg-slate-50 border h-14" placeholder="שאל אותי משהו על הלוגיסטיקה..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSend(input)} />
-          <button onClick={() => onSend(input)} className="bg-idf-primary text-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-idf-primary/30"><Plus className="rotate-45" /></button>
+        <div className="flex gap-2">
+          <input className="input-clean bg-slate-50 border h-12 text-xs" placeholder="שאל אותי משהו..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSend(input)} />
+          <button onClick={() => onSend(input)} className="bg-idf-primary text-white w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"><Send size={18} /></button>
         </div>
       </div>
     </div>
@@ -469,6 +472,8 @@ export default function App() {
   const [showModal, setShowModal] = useState(null); // 'user' | 'item' | 'import' | 'serial'
   const [activeSerialItem, setActiveSerialItem] = useState(null);
   const [newData, setNewData] = useState({});
+  const [botOpen, setBotOpen] = useState(false);
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
   useEffect(() => {
     // Force Persistence
@@ -852,12 +857,41 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input className="input-clean text-xs pr-10 bg-slate-50" placeholder="מפתח Google Gemini API" type="password" value={geminiKey} onChange={e => {
+                      setGeminiKey(e.target.value);
+                      localStorage.setItem('gemini_api_key', e.target.value);
+                    }} />
+                    <button className="btn-primary py-3 rounded-xl text-[10px]" onClick={() => alert("המפתח נשמר מקומית בדפדפן")}>שמור מפתח API</button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
       </main>
+
+      {/* Floating LogiBot Toggle */}
+      {(user.role === 'ADMIN' || user.role === 'LOGI_OFFICER') && !botOpen && (
+        <button 
+          onClick={() => setBotOpen(true)}
+          className="fixed bottom-10 left-10 w-16 h-16 bg-idf-dark text-white rounded-2xl flex items-center justify-center shadow-2xl hover:bg-idf-primary transition-all z-[400] group"
+        >
+          <MessageSquare size={28} className="group-hover:scale-110 transition-transform" />
+          <div className="absolute -top-2 -right-2 bg-idf-primary text-[8px] font-black px-2 py-1 rounded-full animate-bounce">AI</div>
+        </button>
+      )}
+
+      {botOpen && (
+        <LogiBot 
+          catalog={catalog} 
+          inventory={inventory} 
+          requests={requests} 
+          transactions={transactions} 
+          apiKey={geminiKey}
+          onClose={() => setBotOpen(false)} 
+        />
+      )}
 
       <div className="fixed bottom-6 right-6 flex items-center gap-2 bg-white/80 backdrop-blur px-4 py-2 rounded-full border shadow-sm z-50">
         <div className={`w-2 h-2 rounded-full animate-pulse ${dbStatus === 'online' ? 'bg-emerald-500' : dbStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-400'}`}></div>
