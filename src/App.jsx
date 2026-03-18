@@ -254,10 +254,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
+    // Safety timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("Loading timeout reached. Forcing UI display.");
+        setLoading(false);
+      }
+    }, 8000);
+
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       console.log("Auth Stage 1: State Change Detected", authUser?.email);
-      if (authUser) {
-        try {
+      try {
+        if (authUser) {
           console.log("Auth Stage 2: Fetching DB Metadata...");
           const userData = await getUserByEmail(authUser.email);
           if (userData) {
@@ -269,27 +277,45 @@ export default function App() {
             await addUserToFirestore(newUser);
             setUser({ ...authUser, ...newUser });
           }
-        } catch (err) {
-          console.error("Auth System Critical Error:", err);
-          alert("שגיאת הרשאות: " + err.message + "\nוודא ש-Firestore מוגדר ב-Test Mode.");
+        } else {
+          console.log("Auth Stage 1: No User Session");
+          setUser(null);
         }
-      } else {
-        console.log("Auth Stage 1: No User Session");
-        setUser(null);
+      } catch (err) {
+        console.error("Auth System Critical Error:", err);
+        // We don't alert here to avoid infinite loops, but we log.
+      } finally {
+        setLoading(false);
+        clearTimeout(loadingTimeout);
       }
-      setLoading(false);
     });
 
-    // Real-time subscribers
-    const unsubCatalog = subscribeToCollection("catalog", setCatalog);
-    const unsubInventory = subscribeToInventory(setInventory);
+    // Real-time subscribers with basic error handling
+    const unsubCatalog = subscribeToCollection("catalog", (data) => {
+      if (data && data.length > 0) setCatalog(data);
+    });
+    
+    const unsubInventory = subscribeToInventory((data) => {
+      if (data) setInventory(data);
+    });
+
     const unsubRequests = subscribeToCollection("requests", setRequests);
     const unsubUsers = subscribeToCollection("users", setUsers);
 
-    // Initial Seeding
-    seedInitialData({ catalog: INITIAL_CATALOG, inventory: INITIAL_INVENTORY, users: INITIAL_USERS });
+    // Initial Seeding (wrapped in try-catch to prevent blocking)
+    const runSeed = async () => {
+      try {
+        await seedInitialData({ catalog: INITIAL_CATALOG, inventory: INITIAL_INVENTORY, users: INITIAL_USERS });
+      } catch (err) {
+        console.error("Seeding failed (DB might not be initialized):", err);
+      }
+    };
+    runSeed();
 
-    return () => { unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); };
+    return () => { 
+      unsubAuth(); unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); 
+      clearTimeout(loadingTimeout);
+    };
   }, []);
 
   const handleLogin = async () => {
