@@ -70,8 +70,19 @@ export const subscribeToCollection = (collectionName, callback) => {
 };
 
 export const subscribeToInventory = (callback) => {
-  return onSnapshot(doc(db, "inventory", "battalion"), (doc) => {
-    if (doc.exists()) callback(doc.data());
+  return onSnapshot(collection(db, "inventory"), (snapshot) => {
+    const data = { battalion: {}, companies: {} };
+    snapshot.docs.forEach(doc => {
+      if (doc.id === 'battalion_stock') data.battalion = doc.data();
+      else data.companies[doc.id] = doc.data();
+    });
+    callback(data);
+  });
+};
+
+export const subscribeToStandards = (callback) => {
+  return onSnapshot(collection(db, "standards"), (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   });
 };
 
@@ -123,5 +134,11 @@ export const addItemToCatalog = async (item) => {
 };
 
 export const updateBattalionInventory = async (newInventory) => {
-  await setDoc(doc(db, "inventory", "battalion"), newInventory);
+  const invRef = doc(db, "inventory", "battalion_stock");
+  await setDoc(invRef, newInventory);
+};
+
+export const updateStandard = async (company, itemId, qty) => {
+  const stdRef = doc(db, "standards", `${company}_${itemId}`);
+  await setDoc(stdRef, { company, item_id: itemId, qty });
 };

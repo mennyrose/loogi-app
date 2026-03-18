@@ -474,6 +474,7 @@ export default function App() {
   const [newData, setNewData] = useState({});
   const [botOpen, setBotOpen] = useState(false);
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || 'AIzaSyBiVqKFHQ2DizDvYyh1boAO0tH6qM1SCLw');
+  const [standards, setStandards] = useState([]);
 
   useEffect(() => {
     // Force Persistence
@@ -483,7 +484,6 @@ export default function App() {
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
-        // STEP 1: Set user immediately with basic info to UNBLOCK UI
         setUser({ 
           ...authUser, 
           role: 'COMPANY_SGT', 
@@ -491,16 +491,10 @@ export default function App() {
           full_name: authUser.displayName || 'משתמש גוגל' 
         });
         setLoading(false);
-
-        // STEP 2: Fetch metadata in background
         try {
           const userData = await getUserByEmail(authUser.email);
-          if (userData) {
-            setUser(prev => ({ ...prev, ...userData }));
-            setDbStatus('online');
-          } else {
-            setDbStatus('online'); // Connection works, but user is new
-          }
+          if (userData) setUser(prev => ({ ...prev, ...userData }));
+          setDbStatus('online');
         } catch (err) {
           console.error("BG DB Error:", err);
           setDbStatus('offline');
@@ -512,34 +506,33 @@ export default function App() {
       clearTimeout(loadingTimeout);
     });
 
-    // Real-time subscribers with basic error handling
+    // Real-time subscribers
     const unsubCatalog = subscribeToCollection("catalog", (data) => {
       if (data && data.length > 0) setCatalog(data);
     });
-    
     const unsubInventory = subscribeToInventory((data) => {
       if (data) setInventory(data);
     });
-
     const unsubRequests = subscribeToCollection("requests", setRequests);
     const unsubUsers = subscribeToCollection("users", setUsers);
     const unsubTx = subscribeToCollection("transactions", (data) => {
       setTransactions(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
     });
     const unsubTemplates = subscribeToCollection("templates", setTemplates);
+    const unsubStandards = subscribeToStandards(setStandards);
 
-    // Initial Seeding (wrapped in try-catch to prevent blocking)
+    // Initial Seeding
     const runSeed = async () => {
       try {
         await seedInitialData({ catalog: INITIAL_CATALOG, inventory: INITIAL_INVENTORY, users: INITIAL_USERS });
       } catch (err) {
-        console.error("Seeding failed (DB might not be initialized):", err);
+        console.error("Seeding failed:", err);
       }
     };
     runSeed();
 
     return () => { 
-      unsubAuth(); unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); unsubTx(); unsubTemplates();
+      unsubAuth(); unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); unsubTx(); unsubTemplates(); unsubStandards();
       clearTimeout(loadingTimeout);
     };
   }, []);
@@ -557,6 +550,15 @@ export default function App() {
     }
   };
   const handleLogout = () => signOut(auth);
+
+  const updateStandard = async (company, itemId, qty) => {
+    const existingStandard = standards.find(s => s.company === company && s.item_id === itemId);
+    if (existingStandard) {
+      await updateStandardInFirestore(existingStandard.id, { qty });
+    } else {
+      await addStandardToFirestore({ company, item_id: itemId, qty });
+    }
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center font-heebo" dir="rtl">
@@ -618,7 +620,6 @@ export default function App() {
               <div className="space-y-6 animate-fade-in">
                 {(user.role === 'ADMIN' || user.role === 'LOGI_OFFICER') ? (
                   <div className="grid grid-cols-1 gap-6">
-                    {/* Command Center View */}
                     <div className="bg-white rounded-3xl border shadow-sm p-8">
                       <div className="flex justify-between items-center mb-8 border-b pb-4">
                         <div>
@@ -647,65 +648,33 @@ export default function App() {
                                   </div>
                                 </div>
                                 <div className="flex gap-2">
-                                  <button 
-                                    onClick={async () => {
+                                  <button onClick={async () => {
                                       for (const req of itemRequests) {
-                                        if (req.status === 'PENDING') {
-                                          await updateRequestInFirestore(req.id, { status: 'ESCALATED_TO_BRIGADE' });
-                                        }
+                                        if (req.status === 'PENDING') await updateRequestInFirestore(req.id, { status: 'ESCALATED_TO_BRIGADE' });
                                       }
-                                    }}
-                                    className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400">
-                                    העבר לחטיבה
-                                  </button>
-                                  <button 
-                                    onClick={async () => {
+                                    }} className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400">העבר לחטיבה</button>
+                                  <button onClick={async () => {
                                       const lastModified = itemRequests.find(r => r.previousStatus);
-                                      if (lastModified) {
-                                        await updateRequestInFirestore(lastModified.id, { 
-                                          status: lastModified.previousStatus, 
-                                          approvedQty: 0, 
-                                          previousStatus: null 
-                                        });
-                                      }
-                                    }}
-                                    className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400 flex items-center gap-1">
-                                    <History size={12}/> Undo
-                                  </button>
+                                      if (lastModified) await updateRequestInFirestore(lastModified.id, { status: lastModified.previousStatus, approvedQty: 0, previousStatus: null });
+                                    }} className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400 flex items-center gap-1"><History size={12}/> Undo</button>
                                 </div>
                               </div>
-                              
                               <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-4">
-                                {['אלפא', 'בראבו', 'ג', 'מפקדה', 'מסייעת'].map(comp => {
+                                {COMPANIES.map(comp => {
                                   const req = itemRequests.find(r => r.company === comp);
                                   return (
                                     <div key={comp} className={`p-4 rounded-xl border ${req ? 'bg-white shadow-sm border-blue-100' : 'bg-slate-50/30 border-dashed opacity-60'}`}>
                                       <div className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">{comp}</div>
                                       <div className="flex justify-between items-end">
-                                        <div className="text-[10px] font-bold">
-                                          {req ? `ביקשו: ${req.qty}` : 'לא ביקשו'}
-                                        </div>
-                                        <input 
-                                          type="number" 
-                                          defaultValue={req?.approvedQty || 0}
-                                          onChange={async (e) => {
+                                        <div className="text-[10px] font-bold">{req ? `ביקשו: ${req.qty}` : 'לא ביקשו'}</div>
+                                        <input type="number" defaultValue={req?.approvedQty || 0} onChange={async (e) => {
                                             const val = parseInt(e.target.value);
                                             if (req) {
                                               await updateRequestInFirestore(req.id, { approvedQty: val, status: 'READY_FOR_PICKUP', previousStatus: req.status });
                                             } else {
-                                              // Proactive allocation
-                                              await addRequestToFirestore({
-                                                item_id: item.internal_id,
-                                                company: comp,
-                                                qty: 0,
-                                                approvedQty: val,
-                                                status: 'READY_FOR_PICKUP',
-                                                time: new Date().toLocaleTimeString()
-                                              });
+                                              await addRequestToFirestore({ item_id: item.internal_id, company: comp, qty: 0, approvedQty: val, status: 'READY_FOR_PICKUP', time: new Date().toLocaleTimeString() });
                                             }
-                                          }}
-                                          className="w-12 bg-slate-100 border-none rounded-lg text-center font-black text-idf-primary p-2 focus:ring-2 focus:ring-idf-primary/20"
-                                        />
+                                          }} className="w-12 bg-slate-100 border-none rounded-lg text-center font-black text-idf-primary p-2 focus:ring-2 focus:ring-idf-primary/20" />
                                       </div>
                                     </div>
                                   );
@@ -738,19 +707,14 @@ export default function App() {
                 )}
               </div>
             )}
+
             {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} user={user} templates={templates} />}
+
             {activeTab === 'history' && (
               <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
                 <table className="w-full text-right text-sm">
                   <thead className="bg-slate-50 text-slate-400 font-black border-b text-[10px] uppercase">
-                    <tr>
-                      <th className="p-6">מתי</th>
-                      <th className="p-6">סוג</th>
-                      <th className="p-6">פלוגה</th>
-                      <th className="p-6">מקבל (מספר אישי)</th>
-                      <th className="p-6">פריטים</th>
-                      <th className="p-6 text-left">חתימה</th>
-                    </tr>
+                    <tr><th className="p-6">מתי</th><th className="p-6">סוג</th><th className="p-6">פלוגה</th><th className="p-6">מקבל</th><th className="p-6">פריטים</th><th className="p-6 text-left">חתימה</th></tr>
                   </thead>
                   <tbody className="divide-y">
                     {transactions.map(tx => (
@@ -766,39 +730,54 @@ export default function App() {
                             ))}
                           </div>
                         </td>
-                        <td className="p-6 text-left">
-                          <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-[8px] font-black text-slate-300 italic border border-dashed">
-                            Signed
-                          </div>
-                        </td>
+                        <td className="p-6 text-left"><div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-[8px] font-black text-slate-300 italic border border-dashed">Signed</div></td>
                       </tr>
                     ))}
-                    {transactions.length === 0 && (
-                      <tr><td colSpan="6" className="p-20 text-center text-slate-300 italic">טרם בוצעו תנועות במערכת</td></tr>
-                    )}
                   </tbody>
                 </table>
               </div>
             )}
+
             {activeTab === 'inventory' && (
-              <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+              <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
                 <table className="w-full text-right text-sm">
                   <thead className="bg-slate-50 text-slate-400 font-black border-b text-[10px] uppercase">
-                    <tr><th className="p-6">פריט</th><th className="p-6 text-center">כמות</th><th className="p-6 text-left">סטטוס</th></tr>
+                    <tr>
+                      <th className="p-6">פריט</th>
+                      <th className="p-6 text-center">סטטוס</th>
+                      <th className="p-4 text-center">מלאי גדודי</th>
+                      <th className="p-4 text-center">נופק לפלוגות</th>
+                      <th className="p-4 text-center">תקן גדודי</th>
+                      <th className="p-4 text-center">פער</th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {inventory.battalion.map(inv => {
-                      const itemData = catalog.find(c => c.internal_id === inv.item_id);
+                    {catalog.map(item => {
+                      const battalionQty = inventory.battalion.find(inv => inv.item_id === item.internal_id)?.qty || 0;
+                      const companiesQty = Object.entries(inventory.companies || {}).reduce((sum, [co, items]) => {
+                        const itemInCo = items.find(i => i.item_id === item.internal_id);
+                        return sum + (itemInCo?.qty || 0);
+                      }, 0);
+                      const totalStandard = standards.filter(s => s.item_id === item.internal_id).reduce((sum, s) => sum + (s.qty || 0), 0);
+                      const gap = (battalionQty + companiesQty) - totalStandard;
+                      
                       return (
-                        <tr key={inv.item_id} className="hover:bg-slate-50">
-                          <td className="p-6">
-                            <div className="font-black">{itemData?.name}</div>
-                            {inv.serials?.length > 0 && (
-                              <div className="text-[10px] text-idf-primary font-bold mt-1">צ': {inv.serials.join(', ')}</div>
-                            )}
+                        <tr key={item.internal_id} className="hover:bg-slate-50 transition-all font-black text-xs">
+                          <td className="p-4">
+                            <div className="flex flex-col">
+                              <span>{item.name}</span>
+                              <span className="text-[9px] text-slate-400 font-normal uppercase tracking-wider">{item.category}</span>
+                            </div>
                           </td>
-                          <td className="p-6 text-center font-black text-xl text-idf-primary">{inv.qty}</td>
-                          <td className="p-6 text-left"><Badge variant="success">תקין</Badge></td>
+                          <td className="p-4 text-center">
+                            <Badge variant={gap < 0 ? 'danger' : 'success'}>{gap < 0 ? 'חוסר' : 'תקין'}</Badge>
+                          </td>
+                          <td className="p-4 text-center">{battalionQty}</td>
+                          <td className="p-4 text-center">{companiesQty}</td>
+                          <td className="p-4 text-center text-slate-400 font-normal">{totalStandard || '-'}</td>
+                          <td className={`p-4 text-center ${gap < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {gap > 0 ? `+${gap}` : gap}
+                          </td>
                         </tr>
                       );
                     })}
@@ -806,63 +785,79 @@ export default function App() {
                 </table>
               </div>
             )}
+
             {activeTab === 'mgmt' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b pb-4">
-                    <h4 className="font-black">נתוני קטלוג גדודי</h4>
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowModal('import')} className="p-2 text-slate-400 hover:text-idf-primary border rounded-xl"><Database size={14}/></button>
-                      <button onClick={() => setShowModal('item')} className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
-                        <Plus size={14} /> הוסף פריט
-                      </button>
-                    </div>
+              <div className="space-y-8 animate-fade-in">
+                {/* Standards Management Section */}
+                <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
+                  <div className="flex items-center gap-4 border-b pb-4">
+                    <div className="w-12 h-12 bg-idf-primary/10 rounded-2xl flex items-center justify-center text-idf-primary"><ClipboardList size={22} /></div>
+                    <h4 className="font-black text-lg">ניהול תקנים פלוגתיים (TQE)</h4>
                   </div>
-                  <div className="space-y-2">
-                    {catalog.map(item => (
-                      <div key={item.internal_id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group transition-all hover:bg-white hover:shadow-md">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-sm">{item.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono italic">{item.sku}</span>
-                        </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="p-2 text-slate-400 hover:text-idf-primary"><Edit2 size={14} /></button>
-                          <button className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right text-[10px]">
+                      <thead>
+                        <tr className="border-b bg-slate-50 text-slate-400 font-black uppercase">
+                          <th className="p-4">פלוגה</th>
+                          {catalog.slice(0, 8).map(item => <th key={item.internal_id} className="p-4 text-center">{item.name}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {COMPANIES.map(comp => (
+                          <tr key={comp} className="border-b last:border-0 hover:bg-slate-50">
+                            <td className="p-4 font-black text-idf-dark">{comp}</td>
+                            {catalog.slice(0, 8).map(item => {
+                              const stdValue = standards.find(s => s.company === comp && s.item_id === item.internal_id)?.qty || 0;
+                              return (
+                                <td key={item.internal_id} className="p-4">
+                                  <input type="number" className="w-16 mx-auto bg-slate-50 border rounded-lg p-2 text-center font-black focus:ring-2 focus:ring-idf-primary/20 outline-none" 
+                                    value={stdValue} onChange={(e) => updateStandard(comp, item.internal_id, parseInt(e.target.value) || 0)} />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
-                  <div className="flex justify-between items-center border-b pb-4">
-                    <h4 className="font-black">ניהול משתמשים</h4>
-                    <button onClick={() => setShowModal('user')} className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
-                      <UserPlus size={14} /> הוסף משתמש
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {users.map(u => (
-                      <div key={u.email} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group transition-all hover:bg-white hover:shadow-md">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-sm">{u.full_name}</span>
-                          <span className="text-[10px] text-slate-400">{u.email}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge>{ROLE_LABELS[u.role]}</Badge>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button className="p-2 text-slate-400 hover:text-idf-primary"><Edit2 size={14} /></button>
-                            <button className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button>
-                          </div>
-                        </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
+                    <div className="flex justify-between items-center border-b pb-4">
+                      <h4 className="font-black">נתוני קטלוג גדודי</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setShowModal('import')} className="p-2 text-slate-400 hover:text-idf-primary border rounded-xl"><Database size={14}/></button>
+                        <button onClick={() => setShowModal('item')} className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2"><Plus size={14} /> הוסף פריט</button>
                       </div>
-                    ))}
+                    </div>
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                      {catalog.map(item => (
+                        <div key={item.internal_id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group hover:bg-white hover:shadow-md transition-all">
+                          <div><div className="font-bold text-sm">{item.name}</div><div className="text-[10px] text-slate-400 font-mono">{item.sku}</div></div>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100"><button className="p-2 text-slate-400 hover:text-idf-primary"><Edit2 size={14} /></button><button className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button></div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input className="input-clean text-xs pr-10 bg-slate-50" placeholder="מפתח Google Gemini API" type="password" value={geminiKey} onChange={e => {
-                      setGeminiKey(e.target.value);
-                      localStorage.setItem('gemini_api_key', e.target.value);
-                    }} />
-                    <button className="btn-primary py-3 rounded-xl text-[10px]" onClick={() => alert("המפתח נשמר מקומית בדפדפן")}>שמור מפתח API</button>
+                  <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
+                    <div className="flex justify-between items-center border-b pb-4">
+                      <h4 className="font-black">ניהול משתמשים</h4>
+                      <button onClick={() => setShowModal('user')} className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2"><UserPlus size={14} /> הוסף משתמש</button>
+                    </div>
+                    <div className="space-y-2">
+                      {users.map(u => (
+                        <div key={u.email} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group hover:bg-white hover:shadow-md transition-all">
+                          <div><div className="font-bold text-sm">{u.full_name}</div><div className="text-[10px] text-slate-400">{u.email}</div></div>
+                          <div className="flex items-center gap-3"><Badge>{ROLE_LABELS[u.role]}</Badge><div className="flex items-center gap-1 opacity-0 group-hover:opacity-100"><button className="p-2 text-slate-400 hover:text-idf-primary"><Edit2 size={14} /></button><button className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button></div></div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-8 border-t space-y-4 text-center">
+                       <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">הגדרות בינה מלאכותית</h5>
+                       <input className="input-clean text-xs bg-slate-50 border" placeholder="מפתח Google Gemini API" type="password" value={geminiKey} onChange={e => { setGeminiKey(e.target.value); localStorage.setItem('gemini_api_key', e.target.value); }} />
+                       <button className="btn-primary w-full py-3 rounded-xl text-[10px]" onClick={() => alert("המפתח נשמר מקומית בדפדפן")}>שמור מפתח API</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -888,6 +883,7 @@ export default function App() {
           inventory={inventory} 
           requests={requests} 
           transactions={transactions} 
+          standards={standards}
           apiKey={geminiKey}
           onClose={() => setBotOpen(false)} 
         />
