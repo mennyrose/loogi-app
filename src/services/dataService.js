@@ -88,3 +88,10 @@ export const updateRequestStatusInFirestore = async (requestId, status) => {
 export const addUserToFirestore = async (user) => {
   await setDoc(doc(db, "users", user.email), user);
 };
+
+export const addTransaction = async (tx) => {
+  await addDoc(collection(db, "transactions"), {
+    ...tx,
+    timestamp: new Date().toISOString()
+  });
+};

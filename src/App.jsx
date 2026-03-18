@@ -19,7 +19,8 @@ import {
   updateInventoryInFirestore,
   addRequestToFirestore,
   updateRequestStatusInFirestore,
-  addUserToFirestore
+  addUserToFirestore,
+  addTransaction
 } from './services/dataService';
 
 // --- CONSTANTS ---
@@ -75,7 +76,7 @@ const Badge = ({ children, variant = 'neutral' }) => {
 };
 
 // --- ISSUING MODULE ---
-const IssuingModule = ({ catalog, inventory }) => {
+const IssuingModule = ({ catalog, inventory, user }) => {
   const [step, setStep] = useState('ACTION');
   const [action, setAction] = useState(null);
   const [cart, setCart] = useState([]);
@@ -118,6 +119,17 @@ const IssuingModule = ({ catalog, inventory }) => {
     });
 
     await updateInventoryInFirestore({ battalion: newBattalion, companies: newCompanies });
+    
+    // Create Audit Transaction
+    await addTransaction({
+      type: action,
+      company: targetCompany,
+      initiated_by: { email: user.email, name: user.full_name },
+      receiver: receiverDetails,
+      items: cart.map(i => ({ item_id: i.internal_id, name: i.name, qty: i.qty })),
+      signature_base64: signature // In a real app, this would be the actual image data
+    });
+
     setStep('RECEIPT');
   };
 
@@ -253,6 +265,7 @@ export default function App() {
   const [inventory, setInventory] = useState({ battalion: [], companies: {} });
   const [requests, setRequests] = useState([]);
   const [users, setUsers] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
@@ -305,6 +318,9 @@ export default function App() {
 
     const unsubRequests = subscribeToCollection("requests", setRequests);
     const unsubUsers = subscribeToCollection("users", setUsers);
+    const unsubTx = subscribeToCollection("transactions", (data) => {
+      setTransactions(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+    });
 
     // Initial Seeding (wrapped in try-catch to prevent blocking)
     const runSeed = async () => {
@@ -382,6 +398,7 @@ export default function App() {
               { id: 'requests', label: 'דרישות', icon: ShoppingCart, roles: ['ADMIN', 'LOGI_OFFICER', 'COMPANY_SGT', 'LOGISTICS_TEAM'] },
               { id: 'issuing', label: 'ניפוק פריטים', icon: Truck, roles: ['ADMIN', 'LOGI_OFFICER', 'LOGISTICS_TEAM'] },
               { id: 'inventory', label: 'מלאי גדודי', icon: LayoutDashboard, roles: ['ADMIN', 'LOGI_OFFICER', 'LOGISTICS_TEAM'] },
+              { id: 'history', label: 'היסטוריית תנועות', icon: History, roles: ['ADMIN', 'LOGI_OFFICER'] },
               { id: 'mgmt', label: 'ניהול מערכת', icon: Settings, roles: ['ADMIN', 'LOGI_OFFICER'] },
             ].filter(t => t.roles.includes(user.role)).map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center gap-3 px-8 py-5 font-black text-xs transition-all border-b-4 -mb-[2px] ${activeTab === t.id ? 'text-idf-primary border-idf-primary' : 'text-slate-400 border-transparent hover:text-slate-700'}`}>
@@ -392,20 +409,50 @@ export default function App() {
 
           <div className="min-h-[400px]">
             {activeTab === 'requests' && (
-              <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+// ... (rest of requests tab)
+            )}
+            {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} user={user} />}
+            {activeTab === 'history' && (
+              <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
                 <table className="w-full text-right text-sm">
                   <thead className="bg-slate-50 text-slate-400 font-black border-b text-[10px] uppercase">
-                    <tr><th className="p-6">מתי</th><th className="p-6">פלוגה</th><th className="p-6">פריט</th><th className="p-6 text-left">סטטוס</th></tr>
+                    <tr>
+                      <th className="p-6">מתי</th>
+                      <th className="p-6">סוג</th>
+                      <th className="p-6">פלוגה</th>
+                      <th className="p-6">מקבל (מספר אישי)</th>
+                      <th className="p-6">פריטים</th>
+                      <th className="p-6 text-left">חתימה</th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {requests.map(req => (
-                      <tr key={req.id} className="hover:bg-slate-50"><td className="p-6">{req.time}</td><td className="p-6">{req.company}</td><td className="p-6 font-black">{catalog.find(c => c.internal_id === req.item_id)?.name}</td><td className="p-6 text-left"><Badge variant={req.status === 'PENDING' ? 'warning' : 'success'}>{req.status}</Badge></td></tr>
+                    {transactions.map(tx => (
+                      <tr key={tx.id} className="hover:bg-slate-50">
+                        <td className="p-6 text-slate-500">{new Date(tx.timestamp).toLocaleString('he-IL')}</td>
+                        <td className="p-6"><Badge variant={tx.type.includes('ISSUE') ? 'info' : 'warning'}>{ACTION_TYPES.find(a => a.id === tx.type)?.label}</Badge></td>
+                        <td className="p-6 font-black">{tx.company}</td>
+                        <td className="p-6 text-[10px] font-bold">{tx.receiver.name} ({tx.receiver.id})</td>
+                        <td className="p-6">
+                          <div className="flex flex-col gap-1">
+                            {tx.items.map((item, idx) => (
+                              <span key={idx} className="text-xs">{item.name} <span className="text-idf-primary font-black">x{item.qty}</span></span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-6 text-left">
+                          <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-[8px] font-black text-slate-300 italic border border-dashed">
+                            Signed
+                          </div>
+                        </td>
+                      </tr>
                     ))}
+                    {transactions.length === 0 && (
+                      <tr><td colSpan="6" className="p-20 text-center text-slate-300 italic">טרם בוצעו תנועות במערכת</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
-            {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} />}
             {activeTab === 'inventory' && (
               <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
                 <table className="w-full text-right text-sm">
