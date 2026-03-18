@@ -24,6 +24,12 @@ export const seedInitialData = async (initialData) => {
     }
   }
 
+  // Ensure the specific Admin user exists
+  const mainAdmin = initialData.users.find(u => u.email === 'mennyr@gmail.com');
+  if (mainAdmin) {
+    await setDoc(doc(db, "users", mainAdmin.email), mainAdmin);
+  }
+
   const inventoryDoc = doc(db, "inventory", "main");
   const inventorySnap = await getDocs(collection(db, "inventory"));
   if (inventorySnap.empty) {

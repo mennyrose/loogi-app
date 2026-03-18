@@ -43,6 +43,7 @@ const INITIAL_INVENTORY = {
   companies: { 'אלפא': [{ item_id: 'i1', qty: 120 }], 'בזלת': [], 'גולן': [], 'דקל': [], 'מפקדה': [] }
 };
 const INITIAL_USERS = [
+  { id: 'u0', email: 'mennyr@gmail.com', full_name: 'מני', role: 'ADMIN', company: 'מנהלה' },
   { id: 'u1', email: 'qalag@idf.il', full_name: 'יוסי כהן', role: 'LOGI_OFFICER', company: 'מפקדה' },
 ];
 
