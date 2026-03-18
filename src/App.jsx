@@ -94,6 +94,26 @@ const IssuingModule = ({ catalog, inventory, user }) => {
       .sort((a,b) => a.name.localeCompare(b.name, 'he'));
   }, [catalog, selectedCategory, search]);
 
+  const handleAddUser = async () => {
+    if (!newData.email || !newData.full_name) return alert("נא למלא את כל השדות");
+    await addUserToFirestore({ ...newData, role: newData.role || 'COMPANY_SGT', company: newData.company || 'אלפא' });
+    setShowModal(null);
+    setNewData({});
+  };
+
+  const handleAddItem = async () => {
+    if (!newData.name || !newData.internal_id) return alert("נא למלא את כל השדות");
+    // Add to catalog
+    await addDoc(collection(db, "catalog"), { ...newData, category: newData.category || 'צל"ם' });
+    // Add initial empty inventory
+    await setDoc(doc(db, "inventory", "battalion"), {
+      battalion: [...inventory.battalion, { item_id: newData.internal_id, qty: parseInt(newData.qty || 0) }],
+      companies: inventory.companies
+    });
+    setShowModal(null);
+    setNewData({});
+  };
+
   const addToCart = (item, qty) => {
     const existing = cart.find(c => c.internal_id === item.internal_id);
     if (existing) setCart(cart.map(c => c.internal_id === item.internal_id ? { ...c, qty: c.qty + qty } : c));
@@ -268,6 +288,8 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [activeTab, setActiveTab] = useState('requests');
+  const [showModal, setShowModal] = useState(null); // 'user' | 'item' | 'import'
+  const [newData, setNewData] = useState({});
 
   useEffect(() => {
     // Force Persistence
@@ -594,9 +616,12 @@ export default function App() {
                 <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-4">
                     <h4 className="font-black">נתוני קטלוג גדודי</h4>
-                    <button className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
-                      <Plus size={14} /> הוסף פריט
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowModal('import')} className="p-2 text-slate-400 hover:text-idf-primary border rounded-xl"><Database size={14}/></button>
+                      <button onClick={() => setShowModal('item')} className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
+                        <Plus size={14} /> הוסף פריט
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     {catalog.map(item => (
@@ -616,7 +641,7 @@ export default function App() {
                 <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
                   <div className="flex justify-between items-center border-b pb-4">
                     <h4 className="font-black">ניהול משתמשים</h4>
-                    <button className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
+                    <button onClick={() => setShowModal('user')} className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
                       <UserPlus size={14} /> הוסף משתמש
                     </button>
                   </div>
@@ -650,6 +675,65 @@ export default function App() {
           L∞Giz v2.7 {dbStatus === 'online' ? 'Cloud Connected' : 'Local Mode'}
         </span>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-idf-dark/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-scale-in">
+            <h3 className="text-xl font-black mb-6">
+              {showModal === 'user' ? 'הוספת משתמש חדש' : showModal === 'item' ? 'הוספת פריט לקטלוג' : 'ייבוא נתונים'}
+            </h3>
+            
+            <div className="space-y-4">
+              {showModal === 'user' && (
+                <>
+                  <input placeholder="אימייל" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, email: e.target.value})} />
+                  <input placeholder="שם מלא" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, full_name: e.target.value})} />
+                  <select className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, role: e.target.value})}>
+                    <option value="COMPANY_SGT">רס"פ (פלוגה)</option>
+                    <option value="LOGI_OFFICER">קל"ג (גדוד)</option>
+                    <option value="ADMIN">מנהל מערכת</option>
+                  </select>
+                  <input placeholder="פלוגה" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, company: e.target.value})} />
+                </>
+              )}
+              {showModal === 'item' && (
+                <>
+                  <input placeholder="שם הפריט" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, name: e.target.value})} />
+                  <input placeholder="מק\"ט / מזהה" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, internal_id: e.target.value})} />
+                  <input placeholder="קטגוריה" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, category: e.target.value})} />
+                  <input placeholder="כמות התחלתית במלאי" type="number" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, qty: e.target.value})} />
+                </>
+              )}
+              {showModal === 'import' && (
+                <div className="p-8 border-2 border-dashed border-slate-200 rounded-3xl text-center space-y-4">
+                  <Database size={48} className="mx-auto text-slate-300" />
+                  <p className="text-sm text-slate-500 font-bold">גרור לכאן קובץ CSV או לחץ לבחירה</p>
+                  <input type="file" className="hidden" id="csv-upload" accept=".csv" onChange={async (e) => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                      const text = event.target.result;
+                      alert("הקובץ נקרא בהצלחה. בשלבים הבאים נבצע את העיבוד הסופי.");
+                    };
+                    reader.readAsText(file);
+                  }} />
+                  <button onClick={() => document.getElementById('csv-upload').click()} className="btn-primary w-full py-4 rounded-2xl">בחר קובץ</button>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 flex gap-4">
+              <button 
+                onClick={showModal === 'user' ? handleAddUser : showModal === 'item' ? handleAddItem : () => setShowModal(null)} 
+                className="btn-primary flex-1 py-4 rounded-2xl font-black"
+              >
+                אישור ושמירה
+              </button>
+              <button onClick={() => setShowModal(null)} className="flex-1 py-4 text-slate-400 font-bold">ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
