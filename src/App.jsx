@@ -10,7 +10,7 @@ import {
 
 // --- FIREBASE & SERVICES ---
 import { auth, googleProvider, db } from './firebase';
-import { signInWithRedirect, onAuthStateChanged, signOut, getRedirectResult, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { signInWithPopup, onAuthStateChanged, signOut, getRedirectResult, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { 
   seedInitialData, 
   subscribeToCollection, 
@@ -324,10 +324,14 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error("Login Error:", error);
-      alert("שגיאת התחברות: " + error.message);
+      if (error.code === 'auth/popup-closed-by-user') {
+        alert("התחברות בוטלה: החלון נסגר או נחסם על ידי הדפדפן. נסה שוב וודא שאינך חוסם חלונות קופצים.");
+      } else {
+        alert("שגיאת התחברות: " + error.message);
+      }
     }
   };
   const handleLogout = () => signOut(auth);
