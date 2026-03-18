@@ -45,6 +45,20 @@ export const seedInitialData = async (initialData) => {
       await setDoc(doc(db, "users", user.email), user);
     }
   }
+
+  // Seed Templates (Kits)
+  const templatesCol = collection(db, "templates");
+  const templatesSnap = await getDocs(templatesCol);
+  if (templatesSnap.empty) {
+    console.log("Seeding initial templates...");
+    const INITIAL_TEMPLATES = [
+      { id: 'kit1', name: 'ערכת לוחם בסיסית', items: [{ item_id: 'i1', qty: 1 }, { item_id: 'i2', qty: 1 }] },
+      { id: 'kit2', name: 'זיווד רכב פינוי', items: [{ item_id: 'i1', qty: 5 }, { item_id: 'i3', qty: 10 }] }
+    ];
+    for (const t of INITIAL_TEMPLATES) {
+      await setDoc(doc(db, "templates", t.id), t);
+    }
+  }
 };
 
 // --- REAL-TIME LISTENERS ---

@@ -26,6 +26,28 @@ import {
   updateBattalionInventory
 } from './services/dataService';
 
+// --- NEW COMPONENT: SerialPicker ---
+const SerialPicker = ({ available, selected, onSelect, onClose }) => (
+  <div className="fixed inset-0 bg-idf-dark/60 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-scale-in">
+      <h3 className="text-xl font-black mb-6">בחירת מספרי צ' (סריאליים)</h3>
+      <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1">
+        {available.map(sn => (
+          <button 
+            key={sn} 
+            onClick={() => onSelect(sn)}
+            className={`p-3 rounded-xl border-2 font-black text-xs transition-all ${selected.includes(sn) ? 'bg-idf-primary text-white border-idf-primary' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}
+          >
+            {sn}
+          </button>
+        ))}
+        {available.length === 0 && <div className="col-span-3 text-center p-10 text-slate-300 italic">אין מספרי צ' במלאי</div>}
+      </div>
+      <button onClick={onClose} className="btn-primary w-full mt-8 py-4 rounded-2xl">סיום וסגירה</button>
+    </div>
+  </div>
+);
+
 // --- CONSTANTS ---
 const ROLE_LABELS = { LOGI_OFFICER: 'קל"ג', LOGISTICS_TEAM: 'לוגיסטיקה', COMPANY_SGT: 'נציג פלוגה', ADMIN: 'אדמין' };
 const COMPANIES = ['אלפא', 'בזלת', 'גולן', 'דקל', 'מפקדה'];
@@ -43,8 +65,11 @@ const INITIAL_CATALOG = [
   { internal_id: 'i3', sku: '200400', name: 'מדי ב\' ריפסטופ', category: 'טקסטיל', type: 'מתכלה', tracking: 'כמותי' },
 ];
 const INITIAL_INVENTORY = {
-  battalion: [{ item_id: 'i1', qty: 45, min: 10 }, { item_id: 'i2', qty: 30, min: 5 }],
-  companies: { 'אלפא': [{ item_id: 'i1', qty: 120 }], 'בזלת': [], 'גולן': [], 'דקל': [], 'מפקדה': [] }
+  battalion: [
+    { item_id: 'i1', qty: 45, min: 10, serials: ['צ1001', 'צ1002', 'צ1003', 'צ1004', 'צ1005'] }, 
+    { item_id: 'i2', qty: 30, min: 5, serials: ['ק501', 'ק502', 'ק503'] }
+  ],
+  companies: { 'אלפא': [{ item_id: 'i1', qty: 120, serials: [] }], 'בזלת': [], 'גולן': [], 'דקל': [], 'מפקדה': [] }
 };
 const INITIAL_USERS = [
   { id: 'u0', email: 'mennyr@gmail.com', full_name: 'מני', role: 'ADMIN', company: 'מנהלה' },
@@ -79,7 +104,7 @@ const Badge = ({ children, variant = 'neutral' }) => {
 };
 
 // --- ISSUING MODULE ---
-const IssuingModule = ({ catalog, inventory, user }) => {
+const IssuingModule = ({ catalog, inventory, user, templates }) => {
   const [step, setStep] = useState('ACTION');
   const [action, setAction] = useState(null);
   const [cart, setCart] = useState([]);
@@ -88,6 +113,7 @@ const IssuingModule = ({ catalog, inventory, user }) => {
   const [targetCompany, setTargetCompany] = useState('אלפא');
   const [receiverDetails, setReceiverDetails] = useState({ id: '', name: '', unit: '' });
   const [signature, setSignature] = useState(false);
+  const [serialPickerItem, setSerialPickerItem] = useState(null);
 
   const categories = useMemo(() => [...new Set(catalog.map(i => i.category))], [catalog]);
   const filteredItems = useMemo(() => {
@@ -119,10 +145,22 @@ const IssuingModule = ({ catalog, inventory, user }) => {
     setNewData({});
   };
 
-  const addToCart = (item, qty) => {
+  const addToCart = (item, qty, serials = []) => {
     const existing = cart.find(c => c.internal_id === item.internal_id);
-    if (existing) setCart(cart.map(c => c.internal_id === item.internal_id ? { ...c, qty: c.qty + qty } : c));
-    else setCart([...cart, { ...item, qty }]);
+    if (existing) {
+      setCart(cart.map(c => c.internal_id === item.internal_id ? { ...c, qty: (c.qty || 0) + qty, serials: [...(c.serials || []), ...serials] } : c));
+    } else {
+      setCart([...cart, { ...item, qty, serials }]);
+    }
+  };
+
+  const handleApplyTemplate = (templateId) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    template.items.forEach(ti => {
+      const item = catalog.find(i => i.internal_id === ti.item_id);
+      if (item) addToCart(item, ti.qty);
+    });
   };
 
   const handleConfirm = async () => {
@@ -132,15 +170,36 @@ const IssuingModule = ({ catalog, inventory, user }) => {
     cart.forEach(item => {
       const bIdx = newBattalion.findIndex(i => i.item_id === item.internal_id);
       if (action === 'ISSUE_TO_CO') {
-        if (bIdx > -1) newBattalion[bIdx].qty -= item.qty;
+        if (bIdx > -1) {
+          newBattalion[bIdx].qty -= item.qty;
+          if (item.serials) {
+            newBattalion[bIdx].serials = (newBattalion[bIdx].serials || []).filter(s => !item.serials.includes(s));
+          }
+        }
         if (!newCompanies[targetCompany]) newCompanies[targetCompany] = [];
         const cIdx = newCompanies[targetCompany].findIndex(i => i.item_id === item.internal_id);
-        if (cIdx > -1) newCompanies[targetCompany][cIdx].qty += item.qty;
-        else newCompanies[targetCompany].push({ item_id: item.internal_id, qty: item.qty });
+        if (cIdx > -1) {
+          newCompanies[targetCompany][cIdx].qty += item.qty;
+          if (item.serials) {
+            newCompanies[targetCompany][cIdx].serials = [...(newCompanies[targetCompany][cIdx].serials || []), ...item.serials];
+          }
+        } else {
+          newCompanies[targetCompany].push({ item_id: item.internal_id, qty: item.qty, serials: item.serials || [] });
+        }
       } else if (action === 'RETURN_FROM_CO') {
-        if (bIdx > -1) newBattalion[bIdx].qty += item.qty;
+        if (bIdx > -1) {
+          newBattalion[bIdx].qty += item.qty;
+          if (item.serials) {
+            newBattalion[bIdx].serials = [...(newBattalion[bIdx].serials || []), ...item.serials];
+          }
+        }
         const cIdx = newCompanies[targetCompany].findIndex(i => i.item_id === item.internal_id);
-        if (cIdx > -1) newCompanies[targetCompany][cIdx].qty -= item.qty;
+        if (cIdx > -1) {
+          newCompanies[targetCompany][cIdx].qty -= item.qty;
+          if (item.serials) {
+            newCompanies[targetCompany][cIdx].serials = (newCompanies[targetCompany][cIdx].serials || []).filter(s => !item.serials.includes(s));
+          }
+        }
       }
     });
 
@@ -180,17 +239,26 @@ const IssuingModule = ({ catalog, inventory, user }) => {
           <button onClick={() => setStep('ACTION')} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ArrowRight /></button>
           <div>
             <h3 className="font-black text-lg text-idf-primary leading-tight">{ACTION_TYPES.find(a => a.id === action)?.label}</h3>
-            <p className="text-[10px] font-bold text-slate-400">בחר פריטים להוספה לעגלה</p>
+            <p className="text-[10px] font-bold text-slate-400">בחר פריטים או טען ערכה</p>
           </div>
         </div>
-        {(action === 'ISSUE_TO_CO' || action === 'RETURN_FROM_CO') && (
-          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border w-full md:w-auto">
-            <span className="text-[10px] font-black text-slate-400 pr-2">עבור:</span>
-            <select value={targetCompany} onChange={e => setTargetCompany(e.target.value)} className="bg-transparent font-black text-sm outline-none">
-              {COMPANIES.map(c => <option key={c}>{c}</option>)}
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          {(action === 'ISSUE_TO_CO' || action === 'RETURN_FROM_CO') && (
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border">
+              <span className="text-[10px] font-black text-slate-400 pr-2">עבור:</span>
+              <select value={targetCompany} onChange={e => setTargetCompany(e.target.value)} className="bg-transparent font-black text-sm outline-none">
+                {COMPANIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border">
+            <Briefcase size={14} className="text-idf-primary ml-1" />
+            <select onChange={e => handleApplyTemplate(e.target.value)} className="bg-transparent font-black text-sm outline-none" defaultValue="">
+              <option value="" disabled>טען ערכת זיווד...</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-        )}
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="space-y-2">
@@ -212,21 +280,32 @@ const IssuingModule = ({ catalog, inventory, user }) => {
             <input className="input-clean pr-14 bg-white text-sm shadow-sm" placeholder='חיפוש חופשי (לפי שם או מק"ט)...' value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map(item => (
-              <div key={item.internal_id} className="bg-white p-5 rounded-3xl border border-slate-100 flex flex-col shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
-                <div className="flex-1 mb-4">
-                  <div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-300 tracking-tighter uppercase">{item.sku}</span><Badge variant="gold">{item.category}</Badge></div>
-                  <h5 className="font-black text-slate-800 text-sm">{item.name}</h5>
+            {filteredItems.map(item => {
+              const isSerial = item.tracking === 'סריאלי';
+              const stockItem = inventory.battalion.find(i => i.item_id === item.internal_id);
+              const availableSerials = stockItem?.serials || [];
+              
+              return (
+                <div key={item.internal_id} className="bg-white p-5 rounded-3xl border border-slate-100 flex flex-col shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
+                  <div className="flex-1 mb-4">
+                    <div className="flex justify-between items-start mb-2"><span className="text-[9px] font-black text-slate-300 tracking-tighter uppercase">{item.sku}</span><Badge variant="gold">{item.category}</Badge></div>
+                    <h5 className="font-black text-slate-800 text-sm">{item.name}</h5>
+                    {isSerial && <p className="text-[8px] font-bold text-idf-primary mt-1 flex items-center gap-1"><ShieldCheck size={10}/> פריט סריאלי</p>}
+                  </div>
+                  <div className="flex items-center gap-2 pt-4 border-t border-slate-50">
+                    <input type="number" defaultValue={1} min={1} id={`qty-${item.internal_id}`} className="flex-1 p-2 bg-slate-50 border rounded-xl text-center font-black outline-none focus:ring-2 focus:ring-idf-primary/20" />
+                    <button onClick={() => { 
+                      const q = parseInt(document.getElementById(`qty-${item.internal_id}`).value);
+                      if (isSerial) {
+                        setSerialPickerItem({ ...item, requestedQty: q, available: availableSerials });
+                      } else {
+                        addToCart(item, q);
+                      }
+                    }} className="bg-idf-dark p-2.5 rounded-xl text-white hover:bg-idf-primary transition-all"><Plus size={20} /></button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 pt-4 border-t border-slate-50">
-                  <input type="number" defaultValue={1} min={1} id={`qty-${item.internal_id}`} className="flex-1 p-2 bg-slate-50 border rounded-xl text-center font-black outline-none focus:ring-2 focus:ring-idf-primary/20" />
-                  <button onClick={() => { 
-                    const q = parseInt(document.getElementById(`qty-${item.internal_id}`).value);
-                    addToCart(item, q);
-                  }} className="bg-idf-dark p-2.5 rounded-xl text-white hover:bg-idf-primary transition-all"><Plus size={20} /></button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -235,6 +314,16 @@ const IssuingModule = ({ catalog, inventory, user }) => {
           <div className="flex items-center gap-3"><div className="w-10 h-10 bg-idf-primary rounded-2xl flex items-center justify-center font-black text-lg">{cart.length}</div><span className="font-black text-sm">פריטים בעגלה</span></div>
           <button onClick={() => setStep('CHECKOUT')} className="bg-idf-primary px-8 py-3 rounded-2xl font-black text-sm hover:scale-105 active:scale-95 transition-all shadow-lg">סיכום ואישור</button>
         </div>
+      )}
+      {serialPickerItem && (
+        <SerialPicker 
+          available={serialPickerItem.available}
+          selected={[]} 
+          onSelect={(sn) => {
+            addToCart(serialPickerItem, 1, [sn]);
+          }}
+          onClose={() => setSerialPickerItem(null)}
+        />
       )}
     </div>
   );
@@ -248,7 +337,12 @@ const IssuingModule = ({ catalog, inventory, user }) => {
             <div className="space-y-3">
               {cart.map(item => (
                 <div key={item.internal_id} className="flex justify-between items-center p-5 bg-white border rounded-2xl shadow-sm italic transition-all hover:border-idf-primary">
-                  <div><p className="font-black text-slate-800 text-sm">{item.name}</p></div>
+                  <div>
+                    <p className="font-black text-slate-800 text-sm">{item.name}</p>
+                    {item.serials?.length > 0 && (
+                      <p className="text-[9px] text-idf-primary font-bold mt-1">צ': {item.serials.join(', ')}</p>
+                    )}
+                  </div>
                   <div className="flex items-center gap-6"><span className="font-black text-lg text-idf-primary">x {item.qty}</span><button onClick={() => setCart(cart.filter(c => c.internal_id !== item.internal_id))} className="text-slate-200 hover:text-rose-500"><Trash2 size={18} /></button></div>
                 </div>
               ))}
@@ -292,8 +386,10 @@ export default function App() {
   const [requests, setRequests] = useState([]);
   const [users, setUsers] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [activeTab, setActiveTab] = useState('requests');
-  const [showModal, setShowModal] = useState(null); // 'user' | 'item' | 'import'
+  const [showModal, setShowModal] = useState(null); // 'user' | 'item' | 'import' | 'serial'
+  const [activeSerialItem, setActiveSerialItem] = useState(null);
   const [newData, setNewData] = useState({});
 
   useEffect(() => {
@@ -347,6 +443,7 @@ export default function App() {
     const unsubTx = subscribeToCollection("transactions", (data) => {
       setTransactions(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
     });
+    const unsubTemplates = subscribeToCollection("templates", setTemplates);
 
     // Initial Seeding (wrapped in try-catch to prevent blocking)
     const runSeed = async () => {
@@ -359,7 +456,7 @@ export default function App() {
     runSeed();
 
     return () => { 
-      unsubAuth(); unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); 
+      unsubAuth(); unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); unsubTx(); unsubTemplates();
       clearTimeout(loadingTimeout);
     };
   }, []);
@@ -558,7 +655,7 @@ export default function App() {
                 )}
               </div>
             )}
-            {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} user={user} />}
+            {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} user={user} templates={templates} />}
             {activeTab === 'history' && (
               <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
                 <table className="w-full text-right text-sm">
@@ -607,9 +704,21 @@ export default function App() {
                     <tr><th className="p-6">פריט</th><th className="p-6 text-center">כמות</th><th className="p-6 text-left">סטטוס</th></tr>
                   </thead>
                   <tbody className="divide-y">
-                    {inventory.battalion.map(inv => (
-                      <tr key={inv.item_id} className="hover:bg-slate-50"><td className="p-6 font-black">{catalog.find(c => c.internal_id === inv.item_id)?.name}</td><td className="p-6 text-center font-black text-xl text-idf-primary">{inv.qty}</td><td className="p-6 text-left"><Badge variant="success">תקין</Badge></td></tr>
-                    ))}
+                    {inventory.battalion.map(inv => {
+                      const itemData = catalog.find(c => c.internal_id === inv.item_id);
+                      return (
+                        <tr key={inv.item_id} className="hover:bg-slate-50">
+                          <td className="p-6">
+                            <div className="font-black">{itemData?.name}</div>
+                            {inv.serials?.length > 0 && (
+                              <div className="text-[10px] text-idf-primary font-bold mt-1">צ': {inv.serials.join(', ')}</div>
+                            )}
+                          </td>
+                          <td className="p-6 text-center font-black text-xl text-idf-primary">{inv.qty}</td>
+                          <td className="p-6 text-left"><Badge variant="success">תקין</Badge></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
