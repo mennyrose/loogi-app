@@ -25,6 +25,7 @@ import {
   addItemToCatalog,
   updateBattalionInventory
 } from './services/dataService';
+import { processQuery, exportToExcel } from './services/aiService';
 
 // --- NEW COMPONENT: SerialPicker ---
 const SerialPicker = ({ available, selected, onSelect, onClose }) => (
@@ -211,7 +212,7 @@ const IssuingModule = ({ catalog, inventory, user, templates }) => {
       company: targetCompany,
       initiated_by: { email: user.email, name: user.full_name },
       receiver: receiverDetails,
-      items: cart.map(i => ({ item_id: i.internal_id, name: i.name, qty: i.qty })),
+      items: cart.map(i => ({ item_id: i.internal_id, name: i.name, qty: i.qty, serials: i.serials || [] })),
       signature_base64: signature // In a real app, this would be the actual image data
     });
 
@@ -371,6 +372,83 @@ const IssuingModule = ({ catalog, inventory, user, templates }) => {
       <div className="w-24 h-24 bg-emerald-500 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-emerald-500/30 rotate-3"><Check size={50} strokeWidth={3} /></div>
       <h3 className="text-4xl font-black mb-2 text-idf-dark">בוצע בהצלחה!</h3>
       <button onClick={() => { setStep('ACTION'); setCart([]); setSignature(false); }} className="w-full btn-primary justify-center py-6 rounded-3xl text-lg shadow-xl shadow-idf-primary/30">ניפוק חדש</button>
+    </div>
+  );
+};
+
+// --- NEW COMPONENT: LogiBot ---
+const LogiBot = ({ catalog, inventory, requests, transactions }) => {
+  const [messages, setMessages] = useState([
+    { role: 'bot', text: 'שלום! אני העוזר הלוגיסטי שלך. איך אוכל לעזור היום?' }
+  ]);
+  const [input, setInput] = useState('');
+
+  const scrollRef = useRef();
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const onSend = (txt) => {
+    const userMsg = { role: 'user', text: txt };
+    setMessages(prev => [...prev, userMsg]);
+    
+    // Process AI
+    setTimeout(() => {
+      const resp = processQuery(txt, { catalog, inventory, requests, transactions });
+      setMessages(prev => [...prev, { role: 'bot', ...resp }]);
+    }, 500);
+    setInput('');
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto bg-white rounded-[2.5rem] border shadow-2xl flex flex-col h-[650px] overflow-hidden animate-fade-in relative">
+      <div className="p-6 bg-idf-dark text-white flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-idf-primary rounded-2xl flex items-center justify-center animate-pulse"><MessageSquare size={22} /></div>
+          <div><h3 className="font-black">LogiBot AI</h3><p className="text-[9px] opacity-60 uppercase tracking-widest">Active Intelligence Suite</p></div>
+        </div>
+        <Badge variant="info">v3.4 Analyze Mode</Badge>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+            <div className={`max-w-[80%] p-5 rounded-3xl shadow-sm border ${m.role === 'user' ? 'bg-white rounded-tr-none' : 'bg-idf-primary text-white rounded-tl-none border-idf-primary'}`}>
+              <p className="text-sm font-bold leading-relaxed">{m.text}</p>
+              {m.data && (
+                <div className="mt-4 overflow-x-auto rounded-xl border bg-white/10 p-2">
+                  <table className="w-full text-[10px] text-right">
+                    <thead><tr className="border-b border-white/20">
+                      {Object.keys(m.data[0]).map(k => <th key={k} className="p-2 opacity-60">{k}</th>)}
+                    </tr></thead>
+                    <tbody>{m.data.map((row, idx) => (
+                      <tr key={idx} className="border-b border-white/5 last:border-0">
+                        {Object.values(row).map((v, idx2) => <td key={idx2} className="p-2 font-black">{v}</td>)}
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                  <button onClick={() => exportToExcel(m.data, `${m.type}_Report.xlsx`)} className="mt-3 flex items-center gap-2 text-[8px] bg-white/20 px-3 py-1.5 rounded-lg hover:bg-white/40 transition-all font-black">
+                    <Download size={10} /> הורד כדוח אקסל
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        <div ref={scrollRef} />
+      </div>
+
+      <div className="p-4 bg-white border-t space-y-3">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+            {['מה החוסרים שלי?', 'מי משך הכי הרבה?', 'קצב צריכת מתכלים', 'השוואה וסט לוחם'].map(q => (
+              <button key={q} onClick={() => onSend(q)} className="whitespace-nowrap px-4 py-2 bg-slate-100 hover:bg-idf-primary hover:text-white rounded-xl text-[10px] font-black transition-all border border-slate-200">
+                {q}
+              </button>
+            ))}
+        </div>
+        <div className="flex gap-3">
+          <input className="input-clean bg-slate-50 border h-14" placeholder="שאל אותי משהו על הלוגיסטיקה..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSend(input)} />
+          <button onClick={() => onSend(input)} className="bg-idf-primary text-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-idf-primary/30"><Plus className="rotate-45" /></button>
+        </div>
+      </div>
     </div>
   );
 };
