@@ -379,11 +379,11 @@ export default function App() {
         <div className="space-y-8 animate-fade-in">
           <div className="flex gap-6 border-b-2 border-slate-100 overflow-x-auto no-scrollbar">
             {[
-              { id: 'requests', label: 'דרישות', icon: ShoppingCart },
-              { id: 'issuing', label: 'ניפוק פריטים', icon: Truck },
-              { id: 'inventory', label: 'מלאי גדודי', icon: LayoutDashboard },
-              { id: 'mgmt', label: 'ניהול מערכת', icon: Settings },
-            ].map(t => (
+              { id: 'requests', label: 'דרישות', icon: ShoppingCart, roles: ['ADMIN', 'LOGI_OFFICER', 'COMPANY_SGT', 'LOGISTICS_TEAM'] },
+              { id: 'issuing', label: 'ניפוק פריטים', icon: Truck, roles: ['ADMIN', 'LOGI_OFFICER', 'LOGISTICS_TEAM'] },
+              { id: 'inventory', label: 'מלאי גדודי', icon: LayoutDashboard, roles: ['ADMIN', 'LOGI_OFFICER', 'LOGISTICS_TEAM'] },
+              { id: 'mgmt', label: 'ניהול מערכת', icon: Settings, roles: ['ADMIN', 'LOGI_OFFICER'] },
+            ].filter(t => t.roles.includes(user.role)).map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center gap-3 px-8 py-5 font-black text-xs transition-all border-b-4 -mb-[2px] ${activeTab === t.id ? 'text-idf-primary border-idf-primary' : 'text-slate-400 border-transparent hover:text-slate-700'}`}>
                 <t.icon size={18} />{t.label}
               </button>
