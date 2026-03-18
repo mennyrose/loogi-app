@@ -10,7 +10,7 @@ import {
 
 // --- FIREBASE & SERVICES ---
 import { auth, googleProvider, db } from './firebase';
-import { signInWithRedirect, onAuthStateChanged, signOut, getRedirectResult } from 'firebase/auth';
+import { signInWithRedirect, onAuthStateChanged, signOut, getRedirectResult, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { 
   seedInitialData, 
   subscribeToCollection, 
@@ -245,6 +245,9 @@ const IssuingModule = ({ catalog, inventory }) => {
 
 // --- APP COMPONENT ---
 export default function App() {
+  const [debugLogs, setDebugLogs] = useState([]);
+  const addLog = (msg) => setDebugLogs(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${msg}`]);
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [catalog, setCatalog] = useState([]);
@@ -254,47 +257,55 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
+    // Force Persistence
+    setPersistence(auth, browserLocalPersistence)
+      .then(() => addLog("Persistence Set: Local"))
+      .catch(e => addLog("Persistence Error: " + e.message));
+
     // Safety timeout
     const loadingTimeout = setTimeout(() => {
-      if (loading) { setLoading(false); }
+      if (loading) { 
+        setLoading(false); 
+        addLog("Loading timeout - forced UI");
+      }
     }, 10000);
 
     // Explicitly handle Redirect Result
     getRedirectResult(auth).then((result) => {
       if (result) {
-        console.log("Redirect Auth Success:", result.user.email);
+        addLog("Redirect Success: " + result.user.email);
+      } else {
+        addLog("No direct result from redirect.");
       }
     }).catch((error) => {
-      console.error("Redirect Auth Error:", error);
-      alert("שגיאת חזרה מהתחברות: " + error.message);
+      addLog("Redirect Error: " + error.code);
+      console.error(error);
     });
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
-      console.log("Auth Stage 1: State Change Detected", authUser?.email);
-      try {
-        if (authUser) {
-          console.log("Auth Stage 2: Fetching DB Metadata...");
+      addLog("Auth Change: " + (authUser ? authUser.email : "NULL"));
+      if (authUser) {
+        try {
+          addLog("Fetching DB data...");
           const userData = await getUserByEmail(authUser.email);
           if (userData) {
-            console.log("Auth Stage 3: Found User Role:", userData.role);
+            addLog("User role: " + userData.role);
             setUser({ ...authUser, ...userData });
           } else {
-            console.log("Auth Stage 3: New User, Auto-Registering...");
+            addLog("New user - registering...");
             const newUser = { email: authUser.email, full_name: authUser.displayName, role: 'COMPANY_SGT', company: 'אלפא' };
             await addUserToFirestore(newUser);
             setUser({ ...authUser, ...newUser });
           }
-        } else {
-          console.log("Auth Stage 1: No User Session");
-          setUser(null);
+        } catch (err) {
+          addLog("DB Error: " + err.code);
+          console.error(err);
         }
-      } catch (err) {
-        console.error("Auth System Critical Error:", err);
-        // We don't alert here to avoid infinite loops, but we log.
-      } finally {
-        setLoading(false);
-        clearTimeout(loadingTimeout);
+      } else {
+        setUser(null);
       }
+      setLoading(false);
+      clearTimeout(loadingTimeout);
     });
 
     // Real-time subscribers with basic error handling
@@ -350,6 +361,19 @@ export default function App() {
           <Database size={24} />
           התחברות עם Google
         </button>
+        
+        {/* Debug Console */}
+        <div className="mt-8 p-4 bg-slate-900 rounded-2xl text-left font-mono text-[8px] text-emerald-400 overflow-hidden">
+          <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+            <span className="text-white/40 uppercase tracking-widest font-black">Debug Console</span>
+            <RefreshCw size={10} className="animate-spin-slow cursor-pointer" onClick={() => window.location.reload()} />
+          </div>
+          {debugLogs.map((log, i) => (
+            <div key={i} className="py-0.5 border-b border-white/5 truncate">{log}</div>
+          ))}
+          {debugLogs.length === 0 && <div className="italic opacity-30">Waiting for events...</div>}
+        </div>
+
         <p className="mt-8 text-[10px] text-slate-300 font-bold uppercase tracking-widest leading-loose">
           המערכת מאובטחת ומחוברת בזמן אמת<br/>למסד הנתונים הגדודי ב-Firebase
         </p>
