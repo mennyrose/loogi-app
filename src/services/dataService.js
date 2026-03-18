@@ -102,3 +102,12 @@ export const addTransaction = async (tx) => {
     timestamp: new Date().toISOString()
   });
 };
+
+export const addItemToCatalog = async (item) => {
+  const docRef = await addDoc(collection(db, "catalog"), item);
+  return docRef.id;
+};
+
+export const updateBattalionInventory = async (newInventory) => {
+  await setDoc(doc(db, "inventory", "battalion"), newInventory);
+};

@@ -21,7 +21,9 @@ import {
   updateRequestStatusInFirestore,
   updateRequestInFirestore,
   addUserToFirestore,
-  addTransaction
+  addTransaction,
+  addItemToCatalog,
+  updateBattalionInventory
 } from './services/dataService';
 
 // --- CONSTANTS ---
@@ -720,13 +722,16 @@ export default function App() {
                       alert(`נקראו ${rows.length} שורות מהקובץ. מעלה ל-Cloud...`);
                       
                       for (const row of rows) {
-                        // Assume columns: name, internal_id, category, qty
-                        if (row.name && row.internal_id) {
-                          await addDoc(collection(db, "catalog"), {
-                            name: row.name,
-                            internal_id: row.internal_id.toString(),
-                            category: row.category || 'כללי',
-                            sku: row.sku || ''
+                        // Hebrew Mapping: מק"ט, פריט, קטגוריה, סוג מעקב
+                        const itemId = row['מק"ט'] || row.internal_id;
+                        const itemName = row['פריט'] || row.name;
+                        
+                        if (itemName && itemId) {
+                          await addItemToCatalog({
+                            name: itemName,
+                            internal_id: itemId.toString(),
+                            category: row['קטגוריה'] || row.category || 'כללי',
+                            tracking: row['סוג מעקב'] || row.tracking || 'כמותי'
                           });
                         }
                       }
