@@ -708,14 +708,32 @@ export default function App() {
                 <div className="p-8 border-2 border-dashed border-slate-200 rounded-3xl text-center space-y-4">
                   <Database size={48} className="mx-auto text-slate-300" />
                   <p className="text-sm text-slate-500 font-bold">גרור לכאן קובץ CSV או לחץ לבחירה</p>
-                  <input type="file" className="hidden" id="csv-upload" accept=".csv" onChange={async (e) => {
+                  <input type="file" className="hidden" id="csv-upload" accept=".csv,.xlsx" onChange={async (e) => {
                     const file = e.target.files[0];
                     const reader = new FileReader();
                     reader.onload = async (event) => {
-                      const text = event.target.result;
-                      alert("הקובץ נקרא בהצלחה. בשלבים הבאים נבצע את העיבוד הסופי.");
+                      const data = new Uint8Array(event.target.result);
+                      const workbook = XLSX.read(data, { type: 'array' });
+                      const firstSheet = workbook.SheetNames[0];
+                      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+                      
+                      alert(`נקראו ${rows.length} שורות מהקובץ. מעלה ל-Cloud...`);
+                      
+                      for (const row of rows) {
+                        // Assume columns: name, internal_id, category, qty
+                        if (row.name && row.internal_id) {
+                          await addDoc(collection(db, "catalog"), {
+                            name: row.name,
+                            internal_id: row.internal_id.toString(),
+                            category: row.category || 'כללי',
+                            sku: row.sku || ''
+                          });
+                        }
+                      }
+                      alert("הייבוא הושלם בהצלחה!");
+                      setShowModal(null);
                     };
-                    reader.readAsText(file);
+                    reader.readAsArrayBuffer(file);
                   }} />
                   <button onClick={() => document.getElementById('csv-upload').click()} className="btn-primary w-full py-4 rounded-2xl">בחר קובץ</button>
                 </div>
