@@ -5,13 +5,12 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 // --- FIREBASE CONFIGURATION ---
 // המשתמש צריך להזין כאן את הנתונים מה-Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSyB1f4DNbQ9Zjty9QhZLc4asi20e18nLSOA",
-  authDomain: "loogi-6609.firebaseapp.com",
-  projectId: "loogi-6609",
-  storageBucket: "loogi-6609.firebasestorage.app",
-  messagingSenderId: "55066407521",
-  appId: "1:55066407521:web:d5126fba11cc45e5a17020",
-  measurementId: "G-ML6K340KEQ"
+  apiKey: "AIzaSyBHtVmTr3hll3PRy8ykmABuEiQk_Vvonqk",
+  authDomain: "loogiz.firebaseapp.com",
+  projectId: "loogiz",
+  storageBucket: "loogiz.firebasestorage.app",
+  messagingSenderId: "385710361243",
+  appId: "1:385710361243:web:0b0012306ab15d8bbe943e"
 };
 
 // Initialize Firebase
