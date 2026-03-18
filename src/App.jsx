@@ -409,7 +409,26 @@ export default function App() {
 
           <div className="min-h-[400px]">
             {activeTab === 'requests' && (
-// ... (rest of requests tab)
+              <div className="bg-white rounded-3xl border shadow-sm overflow-hidden animate-fade-in">
+                <table className="w-full text-right text-sm">
+                  <thead className="bg-slate-50 text-slate-400 font-black border-b text-[10px] uppercase">
+                    <tr><th className="p-6">מתי</th><th className="p-6">פלוגה</th><th className="p-6">פריט</th><th className="p-6 text-left">סטטוס</th></tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {requests.map(req => (
+                      <tr key={req.id} className="hover:bg-slate-50">
+                        <td className="p-6">{req.time || new Date().toLocaleDateString()}</td>
+                        <td className="p-6">{req.company}</td>
+                        <td className="p-6 font-black">{catalog.find(c => c.internal_id === req.item_id)?.name || 'פריט לא ידוע'}</td>
+                        <td className="p-6 text-left"><Badge variant={req.status === 'PENDING' ? 'warning' : 'success'}>{req.status}</Badge></td>
+                      </tr>
+                    ))}
+                    {requests.length === 0 && (
+                      <tr><td colSpan="4" className="p-20 text-center text-slate-300 italic">אין דרישות פתוחות כרגע</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
             {activeTab === 'issuing' && <IssuingModule catalog={catalog} inventory={inventory} user={user} />}
             {activeTab === 'history' && (
