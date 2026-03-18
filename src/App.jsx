@@ -247,6 +247,8 @@ const IssuingModule = ({ catalog, inventory }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dbStatus, setDbStatus] = useState('connecting'); // 'connecting' | 'online' | 'offline'
+  
   const [catalog, setCatalog] = useState([]);
   const [inventory, setInventory] = useState({ battalion: [], companies: {} });
   const [requests, setRequests] = useState([]);
@@ -254,42 +256,41 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
-    // Force Persistence for stable sessions
+    // Force Persistence
     setPersistence(auth, browserLocalPersistence).catch(console.error);
 
-    // Safety timeout to prevent infinite loading
-    const loadingTimeout = setTimeout(() => {
-      if (loading) setLoading(false);
-    }, 10000);
+    const loadingTimeout = setTimeout(() => setLoading(false), 10000);
 
-    // Explicitly handle Redirect Result for Vercel stability
     getRedirectResult(auth).catch(console.error);
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
+        // STEP 1: Set user immediately with basic info to UNBLOCK UI
+        setUser({ 
+          ...authUser, 
+          role: 'COMPANY_SGT', 
+          company: 'אלפא', 
+          full_name: authUser.displayName || 'משתמש גוגל' 
+        });
+        setLoading(false);
+
+        // STEP 2: Fetch metadata in background
         try {
-          // Attempt to fetch user data from Firestore with a 5s cutoff
-          const dbPromise = getUserByEmail(authUser.email);
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
-          
-          const userData = await Promise.race([dbPromise, timeoutPromise]);
-          
+          const userData = await getUserByEmail(authUser.email);
           if (userData) {
-            setUser({ ...authUser, ...userData });
+            setUser(prev => ({ ...prev, ...userData }));
+            setDbStatus('online');
           } else {
-            // New user or missing from DB - allow entry with default role
-            const newUser = { email: authUser.email, full_name: authUser.displayName || 'משתמש חדש', role: 'COMPANY_SGT', company: 'אלפא' };
-            setUser({ ...authUser, ...newUser });
+            setDbStatus('online'); // Connection works, but user is new
           }
         } catch (err) {
-          console.error("Auth DB Error:", err);
-          // Fallback allow
-          setUser({ ...authUser, role: 'COMPANY_SGT', company: 'אלפא', full_name: authUser.displayName });
+          console.error("BG DB Error:", err);
+          setDbStatus('offline');
         }
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
       clearTimeout(loadingTimeout);
     });
 
@@ -436,8 +437,10 @@ export default function App() {
       </main>
 
       <div className="fixed bottom-6 right-6 flex items-center gap-2 bg-white/80 backdrop-blur px-4 py-2 rounded-full border shadow-sm z-50">
-        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest tracking-[0.2em]">L∞Giz v2.6 Live Cloud</span>
+        <div className={`w-2 h-2 rounded-full animate-pulse ${dbStatus === 'online' ? 'bg-emerald-500' : dbStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-400'}`}></div>
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest tracking-[0.2em]">
+          L∞Giz v2.7 {dbStatus === 'online' ? 'Cloud Connected' : 'Local Mode'}
+        </span>
       </div>
     </div>
   );
