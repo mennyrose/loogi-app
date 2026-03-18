@@ -286,20 +286,26 @@ export default function App() {
       addLog("Auth Change: " + (authUser ? authUser.email : "NULL"));
       if (authUser) {
         try {
-          addLog("Fetching DB data...");
-          const userData = await getUserByEmail(authUser.email);
+          addLog("Fetching DB data... (Timeout in 5s)");
+          // Race between DB fetch and a 5s timeout
+          const dbPromise = getUserByEmail(authUser.email);
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 5000));
+          
+          const userData = await Promise.race([dbPromise, timeoutPromise]);
+          
           if (userData) {
             addLog("User role: " + userData.role);
             setUser({ ...authUser, ...userData });
           } else {
-            addLog("New user - registering...");
-            const newUser = { email: authUser.email, full_name: authUser.displayName, role: 'COMPANY_SGT', company: 'אלפא' };
-            await addUserToFirestore(newUser);
+            addLog("User not in DB - using default role");
+            const newUser = { email: authUser.email, full_name: authUser.displayName || 'משתמש חדש', role: 'COMPANY_SGT', company: 'אלפא' };
             setUser({ ...authUser, ...newUser });
           }
         } catch (err) {
-          addLog("DB Error: " + err.code);
+          addLog("DB Error/Timeout: " + err.message);
           console.error(err);
+          // Fallback to basic user if DB fails
+          setUser({ ...authUser, role: 'COMPANY_SGT', company: 'אלפא', full_name: authUser.displayName });
         }
       } else {
         setUser(null);
