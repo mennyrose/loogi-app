@@ -423,15 +423,50 @@ export default function App() {
             {activeTab === 'mgmt' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
-                  <h4 className="font-black border-b pb-4">נתוני קטלוג גדודי</h4>
+                  <div className="flex justify-between items-center border-b pb-4">
+                    <h4 className="font-black">נתוני קטלוג גדודי</h4>
+                    <button className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
+                      <Plus size={14} /> הוסף פריט
+                    </button>
+                  </div>
                   <div className="space-y-2">
-                    {catalog.map(item => <div key={item.internal_id} className="flex justify-between p-3 bg-slate-50 rounded-xl"><span>{item.name}</span><span className="text-slate-300 font-bold">{item.sku}</span></div>)}
+                    {catalog.map(item => (
+                      <div key={item.internal_id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group transition-all hover:bg-white hover:shadow-md">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-sm">{item.name}</span>
+                          <span className="text-[10px] text-slate-400 font-mono italic">{item.sku}</span>
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="p-2 text-slate-400 hover:text-idf-primary"><Edit2 size={14} /></button>
+                          <button className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-4">
-                  <h4 className="font-black border-b pb-4">ניהול משתמשים</h4>
+                  <div className="flex justify-between items-center border-b pb-4">
+                    <h4 className="font-black">ניהול משתמשים</h4>
+                    <button className="btn-primary py-2 px-4 text-[10px] rounded-xl flex items-center gap-2">
+                      <UserPlus size={14} /> הוסף משתמש
+                    </button>
+                  </div>
                   <div className="space-y-2">
-                    {users.map(u => <div key={u.email} className="flex justify-between p-3 bg-slate-50 rounded-xl"><span>{u.full_name}</span><Badge>{ROLE_LABELS[u.role]}</Badge></div>)}
+                    {users.map(u => (
+                      <div key={u.email} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group transition-all hover:bg-white hover:shadow-md">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-sm">{u.full_name}</span>
+                          <span className="text-[10px] text-slate-400">{u.email}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge>{ROLE_LABELS[u.role]}</Badge>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button className="p-2 text-slate-400 hover:text-idf-primary"><Edit2 size={14} /></button>
+                            <button className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
