@@ -245,9 +245,6 @@ const IssuingModule = ({ catalog, inventory }) => {
 
 // --- APP COMPONENT ---
 export default function App() {
-  const [debugLogs, setDebugLogs] = useState([]);
-  const addLog = (msg) => setDebugLogs(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${msg}`]);
-
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [catalog, setCatalog] = useState([]);
@@ -367,18 +364,6 @@ export default function App() {
           <Database size={24} />
           התחברות עם Google
         </button>
-        
-        {/* Debug Console */}
-        <div className="mt-8 p-4 bg-slate-900 rounded-2xl text-left font-mono text-[8px] text-emerald-400 overflow-hidden">
-          <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
-            <span className="text-white/40 uppercase tracking-widest font-black">Debug Console</span>
-            <RefreshCw size={10} className="animate-spin-slow cursor-pointer" onClick={() => window.location.reload()} />
-          </div>
-          {debugLogs.map((log, i) => (
-            <div key={i} className="py-0.5 border-b border-white/5 truncate">{log}</div>
-          ))}
-          {debugLogs.length === 0 && <div className="italic opacity-30">Waiting for events...</div>}
-        </div>
 
         <p className="mt-8 text-[10px] text-slate-300 font-bold uppercase tracking-widest leading-loose">
           המערכת מאובטחת ומחוברת בזמן אמת<br/>למסד הנתונים הגדודי ב-Firebase
