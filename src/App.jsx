@@ -280,7 +280,14 @@ export default function App() {
     return () => { unsubCatalog(); unsubInventory(); unsubRequests(); unsubUsers(); };
   }, []);
 
-  const handleLogin = () => signInWithPopup(auth, googleProvider);
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login Error:", error);
+      alert("שגיאת התחברות: " + error.message);
+    }
+  };
   const handleLogout = () => signOut(auth);
 
   if (loading) return (
