@@ -254,54 +254,36 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('requests');
 
   useEffect(() => {
-    // Force Persistence
-    setPersistence(auth, browserLocalPersistence)
-      .then(() => addLog("Persistence Set: Local"))
-      .catch(e => addLog("Persistence Error: " + e.message));
+    // Force Persistence for stable sessions
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
 
-    // Safety timeout
+    // Safety timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
-      if (loading) { 
-        setLoading(false); 
-        addLog("Loading timeout - forced UI");
-      }
+      if (loading) setLoading(false);
     }, 10000);
 
-    // Explicitly handle Redirect Result
-    getRedirectResult(auth).then((result) => {
-      if (result) {
-        addLog("Redirect Success: " + result.user.email);
-      } else {
-        addLog("No direct result from redirect.");
-      }
-    }).catch((error) => {
-      addLog("Redirect Error: " + error.code);
-      console.error(error);
-    });
+    // Explicitly handle Redirect Result for Vercel stability
+    getRedirectResult(auth).catch(console.error);
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
-      addLog("Auth Change: " + (authUser ? authUser.email : "NULL"));
       if (authUser) {
         try {
-          addLog("Fetching DB data... (Timeout in 5s)");
-          // Race between DB fetch and a 5s timeout
+          // Attempt to fetch user data from Firestore with a 5s cutoff
           const dbPromise = getUserByEmail(authUser.email);
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 5000));
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
           
           const userData = await Promise.race([dbPromise, timeoutPromise]);
           
           if (userData) {
-            addLog("User role: " + userData.role);
             setUser({ ...authUser, ...userData });
           } else {
-            addLog("User not in DB - using default role");
+            // New user or missing from DB - allow entry with default role
             const newUser = { email: authUser.email, full_name: authUser.displayName || 'משתמש חדש', role: 'COMPANY_SGT', company: 'אלפא' };
             setUser({ ...authUser, ...newUser });
           }
         } catch (err) {
-          addLog("DB Error/Timeout: " + err.message);
-          console.error(err);
-          // Fallback to basic user if DB fails
+          console.error("Auth DB Error:", err);
+          // Fallback allow
           setUser({ ...authUser, role: 'COMPANY_SGT', company: 'אלפא', full_name: authUser.displayName });
         }
       } else {
