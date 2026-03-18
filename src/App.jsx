@@ -699,7 +699,7 @@ export default function App() {
               {showModal === 'item' && (
                 <>
                   <input placeholder="שם הפריט" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, name: e.target.value})} />
-                  <input placeholder="מק\"ט / מזהה" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, internal_id: e.target.value})} />
+                  <input placeholder={'מק"ט / מזהה'} className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, internal_id: e.target.value})} />
                   <input placeholder="קטגוריה" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, category: e.target.value})} />
                   <input placeholder="כמות התחלתית במלאי" type="number" className="w-full p-4 bg-slate-50 border rounded-2xl" onChange={e => setNewData({...newData, qty: e.target.value})} />
                 </>
@@ -713,9 +713,9 @@ export default function App() {
                     const reader = new FileReader();
                     reader.onload = async (event) => {
                       const data = new Uint8Array(event.target.result);
-                      const workbook = XLSX.read(data, { type: 'array' });
+                      const workbook = window.XLSX.read(data, { type: 'array' });
                       const firstSheet = workbook.SheetNames[0];
-                      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+                      const rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
                       
                       alert(`נקראו ${rows.length} שורות מהקובץ. מעלה ל-Cloud...`);
                       
