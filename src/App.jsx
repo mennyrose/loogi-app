@@ -10,7 +10,7 @@ import {
 
 // --- FIREBASE & SERVICES ---
 import { auth, googleProvider, db } from './firebase';
-import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithRedirect, onAuthStateChanged, signOut } from 'firebase/auth';
 import { 
   seedInitialData, 
   subscribeToCollection, 
@@ -320,7 +320,7 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInWithRedirect(auth, googleProvider);
     } catch (error) {
       console.error("Login Error:", error);
       alert("שגיאת התחברות: " + error.message);
