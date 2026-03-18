@@ -10,7 +10,7 @@ import {
 
 // --- FIREBASE & SERVICES ---
 import { auth, googleProvider, db } from './firebase';
-import { signInWithPopup, onAuthStateChanged, signOut, getRedirectResult, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { 
   seedInitialData, 
   subscribeToCollection, 
@@ -301,8 +301,6 @@ export default function App() {
     setPersistence(auth, browserLocalPersistence).catch(console.error);
 
     const loadingTimeout = setTimeout(() => setLoading(false), 10000);
-
-    getRedirectResult(auth).catch(console.error);
 
     const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
