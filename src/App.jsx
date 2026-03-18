@@ -442,8 +442,31 @@ export default function App() {
                                   </div>
                                 </div>
                                 <div className="flex gap-2">
-                                  <button onClick={() => {/* TODO: Bulk Escalate */}} className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400">העבר לחטיבה</button>
-                                  <button onClick={() => {/* TODO: Undo */}} className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400 flex items-center gap-1"><History size={12}/> Undo</button>
+                                  <button 
+                                    onClick={async () => {
+                                      for (const req of itemRequests) {
+                                        if (req.status === 'PENDING') {
+                                          await updateRequestInFirestore(req.id, { status: 'ESCALATED_TO_BRIGADE' });
+                                        }
+                                      }
+                                    }}
+                                    className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400">
+                                    העבר לחטיבה
+                                  </button>
+                                  <button 
+                                    onClick={async () => {
+                                      const lastModified = itemRequests.find(r => r.previousStatus);
+                                      if (lastModified) {
+                                        await updateRequestInFirestore(lastModified.id, { 
+                                          status: lastModified.previousStatus, 
+                                          approvedQty: 0, 
+                                          previousStatus: null 
+                                        });
+                                      }
+                                    }}
+                                    className="text-[10px] font-black p-2 hover:bg-slate-50 rounded-lg text-slate-400 flex items-center gap-1">
+                                    <History size={12}/> Undo
+                                  </button>
                                 </div>
                               </div>
                               
