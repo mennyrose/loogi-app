@@ -105,11 +105,14 @@ const IssuingModule = ({ catalog, inventory, user }) => {
 
   const handleAddItem = async () => {
     if (!newData.name || !newData.internal_id) return alert("נא למלא את כל השדות");
-    // Add to catalog
-    await addDoc(collection(db, "catalog"), { ...newData, category: newData.category || 'צל"ם' });
-    // Add initial empty inventory
-    await setDoc(doc(db, "inventory", "battalion"), {
-      battalion: [...inventory.battalion, { item_id: newData.internal_id, qty: parseInt(newData.qty || 0) }],
+    await addItemToCatalog({ 
+      name: newData.name, 
+      internal_id: newData.internal_id.toString(), 
+      category: newData.category || 'כללי',
+      tracking: newData.tracking || 'כמותי'
+    });
+    await updateBattalionInventory({ 
+      battalion: [...inventory.battalion, { item_id: newData.internal_id.toString(), qty: parseInt(newData.qty || 0) }],
       companies: inventory.companies
     });
     setShowModal(null);
